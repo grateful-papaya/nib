@@ -50,17 +50,68 @@ export function initSettingsPanel() {
 }
 
 /**
+ * Sliding hover highlight for dropdown lists. One pill element follows the
+ * cursor from row to row (settings.css .dropdown-hover-pill) instead of each
+ * row flashing its own background. Entering the list places the pill
+ * instantly (.no-motion suppresses the top/height transition for one frame);
+ * moving between rows then animates. Uses delegation, so options added later
+ * (custom fonts) are covered automatically. Returns a hide() used when the
+ * dropdown closes without the pointer leaving the list.
+ */
+function attachSlidingHover(listEl) {
+  const pill = document.createElement("li");
+  pill.className = "dropdown-hover-pill";
+  pill.setAttribute("aria-hidden", "true");
+  listEl.prepend(pill);
+
+  let inside = false;
+
+  const hide = () => {
+    inside = false;
+    pill.classList.remove("visible");
+  };
+
+  listEl.addEventListener("mouseover", (e) => {
+    const item = e.target.closest(".dropdown-item");
+    if (!item || !listEl.contains(item)) return;
+
+    if (!inside) {
+      pill.classList.add("no-motion");
+      pill.style.top = `${item.offsetTop}px`;
+      pill.style.height = `${item.offsetHeight}px`;
+      // Flush so the jump lands before the transition is re-enabled.
+      void pill.offsetHeight;
+      pill.classList.remove("no-motion");
+      inside = true;
+    } else {
+      pill.style.top = `${item.offsetTop}px`;
+      pill.style.height = `${item.offsetHeight}px`;
+    }
+    pill.classList.add("visible");
+  });
+
+  listEl.addEventListener("mouseleave", hide);
+  return hide;
+}
+
+/**
  * Initialize the font dropdown.
  */
 export function initFontDropdown(dropdownList, dropdownSelected) {
   const dropdown = document.getElementById("font-dropdown");
   if (!dropdown || !dropdownSelected || !dropdownList) return;
 
+  const hideHoverPill = attachSlidingHover(dropdownList);
+
   dropdownSelected.addEventListener("click", (e) => {
     e.stopPropagation();
     dropdown.classList.toggle("open");
+    if (!dropdown.classList.contains("open")) hideHoverPill();
   });
-  document.addEventListener("click", () => dropdown.classList.remove("open"));
+  document.addEventListener("click", () => {
+    dropdown.classList.remove("open");
+    hideHoverPill();
+  });
 
   dropdownList.addEventListener("click", async (e) => {
     const item = e.target.closest(".dropdown-item");
@@ -68,6 +119,7 @@ export function initFontDropdown(dropdownList, dropdownSelected) {
 
     const value = item.getAttribute("data-value");
     dropdown.classList.remove("open");
+    hideHoverPill();
 
     if (value === "font-select") {
       await handleCustomFontSelect(dropdownSelected, dropdownList);

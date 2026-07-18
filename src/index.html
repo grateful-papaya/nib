@@ -527,14 +527,14 @@
                                                 formula.</span
                                             >
                                         </div>
-                                        <label class="SomeApp-switch">
+                                        <label class="toggle-switch">
                                             <input
                                                 type="checkbox"
                                                 id="raw-tooltip-toggle"
                                                 checked
                                             />
                                             <span
-                                                class="SomeApp-switch-track"
+                                                class="toggle-slider"
                                             ></span>
                                         </label>
                                     </div>
@@ -684,40 +684,27 @@
                                             </p>
                                         </div>
                                         <div
-                                            class="custom-dropdown"
-                                            id="snapshot-mode-dropdown"
+                                            class="segmented-control"
+                                            id="snapshot-mode-segment"
+                                            data-value="quit"
                                         >
                                             <div
-                                                class="dropdown-selected"
-                                                id="snapshot-mode-selected-val"
+                                                class="segmented-thumb"
+                                            ></div>
+                                            <button
+                                                type="button"
+                                                class="segment-option active"
                                                 data-value="quit"
                                             >
-                                                <span
-                                                    class="dropdown-selected-label"
-                                                    >Every quit</span
-                                                >
-                                                <img
-                                                    class="dropdown-arrow-icon"
-                                                    src="assets/arrow-down.svg"
-                                                    alt=""
-                                                />
-                                            </div>
-                                            <div class="dropdown-list-wrapper">
-                                                <ul class="dropdown-list">
-                                                    <li
-                                                        class="dropdown-item"
-                                                        data-value="quit"
-                                                    >
-                                                        Every quit
-                                                    </li>
-                                                    <li
-                                                        class="dropdown-item"
-                                                        data-value="daily"
-                                                    >
-                                                        Last of each day
-                                                    </li>
-                                                </ul>
-                                            </div>
+                                                Every quit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="segment-option"
+                                                data-value="daily"
+                                            >
+                                                Last of each day
+                                            </button>
                                         </div>
                                     </div>
 

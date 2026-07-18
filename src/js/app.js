@@ -947,39 +947,22 @@ const EventBinder = {
     //   backup_snapshot_mode: "quit" (new snapshot per quit)
     //                       | "daily" (one per day, last quit of the day wins)
     //   backup_snapshot_keep: how many to retain; 0 disables snapshots
+    //
+    // Mode is a two-option segmented control (#snapshot-mode-segment). The
+    // thumb position is pure CSS keyed off the container's data-value, so the
+    // handler only has to flip state -- no open/close or outside-click
+    // plumbing like the dropdown this replaced.
 
     document
-      .querySelectorAll("#snapshot-mode-dropdown .dropdown-item")
-      .forEach((item) => {
-        item.addEventListener("click", () => {
-          const val = item.getAttribute("data-value");
-          setSetting("backup_snapshot_mode", val);
-          const selected = document.getElementById("snapshot-mode-selected-val");
-          if (selected) {
-            selected.setAttribute("data-value", val);
-            const label = selected.querySelector(".dropdown-selected-label");
-            const text = item.textContent.trim();
-            if (label) label.textContent = text;
-            else selected.textContent = text;
-          }
-          saveAllSettings();
-        });
-      });
-
-    document
-      .getElementById("snapshot-mode-selected-val")
+      .getElementById("snapshot-mode-segment")
       ?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        document
-          .getElementById("snapshot-mode-dropdown")
-          ?.classList.toggle("open");
+        const btn = e.target.closest(".segment-option");
+        if (!btn || btn.classList.contains("active")) return;
+        const val = btn.getAttribute("data-value");
+        setSnapshotModeUI(val);
+        setSetting("backup_snapshot_mode", val);
+        saveAllSettings();
       });
-
-    document.addEventListener("click", () => {
-      document
-        .getElementById("snapshot-mode-dropdown")
-        ?.classList.remove("open");
-    });
 
     document
       .getElementById("snapshot-keep-input")
@@ -1179,6 +1162,20 @@ export async function changeVaultLocation() {
 }
 
 // ─── App Initialization ───────────────────────────────────────────────────────
+// Sync the snapshot-mode segmented control to a mode value ("quit" | "daily").
+// Shared by the click handler in EventBinder.bindAllEvents() and the settings
+// load in initApp(). Setting data-value on the container is what moves the
+// thumb (settings.css keys the translateX off it); the .active classes drive
+// the label dim/scale styling.
+function setSnapshotModeUI(mode) {
+  const segment = document.getElementById("snapshot-mode-segment");
+  if (!segment) return;
+  segment.setAttribute("data-value", mode);
+  segment.querySelectorAll(".segment-option").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-value") === mode);
+  });
+}
+
 async function initApp(dropdownList, dropdownSelected) {
   let savedFont = "pretendard";
   let savedPadding = "12";
@@ -1237,16 +1234,7 @@ async function initApp(dropdownList, dropdownSelected) {
     setSetting("backup_snapshot_mode", snapMode);
     setSetting("backup_snapshot_keep", settings.backup_snapshot_keep ?? 5);
 
-    const snapModeSelected = document.getElementById(
-      "snapshot-mode-selected-val",
-    );
-    if (snapModeSelected) {
-      snapModeSelected.setAttribute("data-value", snapMode);
-      const labels = { quit: "Every quit", daily: "Last of each day" };
-      const label = snapModeSelected.querySelector(".dropdown-selected-label");
-      if (label) label.textContent = labels[snapMode] || snapMode;
-      else snapModeSelected.textContent = labels[snapMode] || snapMode;
-    }
+    setSnapshotModeUI(snapMode);
 
     const snapKeepEl = document.getElementById("snapshot-keep-input");
     if (snapKeepEl) snapKeepEl.value = settings.backup_snapshot_keep ?? 5;

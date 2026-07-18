@@ -299,8 +299,9 @@
     opacity: 1;
 }
 
-/* option list */
+/* option list. position:relative anchors the sliding hover pill below. */
 .dropdown-list {
+    position: relative;
     min-height: 0;
     overflow: hidden;
     padding: 4px;
@@ -313,34 +314,72 @@
     pointer-events: auto;
 }
 
-/* option rows: same shape/hover language as .context-menu-item (5px radius,
-   quiet rgba(0,0,0,0.06) tint) instead of a saturated blue fill with black
-   text, which was the only hover treatment in the entire app that wasn't a
-   soft neutral tint. Sits on a white list background now, so the resting
-   hover tint needs a touch more weight (0.07) to stay legible against white
-   rather than the ~0.06 that read fine on a gray card. */
+/* option rows: no per-item background anymore. The hover highlight is a
+   single .dropdown-hover-pill that slides between rows (wired in
+   settings.js), so items only handle text color; they sit above the pill
+   via z-index. */
 .dropdown-item {
-    padding: 8px 10px;
+    position: relative;
+    z-index: 1;
+    padding: 9px 12px;
     color: #495057;
     font-size: 0.92rem;
     cursor: pointer;
-    border-radius: 5px;
+    border-radius: 6px;
     box-sizing: border-box;
-    transition: background-color 0.1s ease;
+    transition: color 0.15s ease;
 }
 
 .dropdown-item:hover {
-    background-color: rgba(0, 0, 0, 0.07);
     color: #212529;
 }
 
-/* local font option divider: was #dfe3e6 against a #f6f6f6 list, nearly
-   invisible; #e4e4e4 keeps it subtle but visible against the new white
-   list background. */
+/* Sliding hover highlight: one rounded tint that follows the cursor from
+   row to row instead of each row lighting up as a separate hard rectangle.
+   JS sets top/height from the hovered item's offsets; entering the list
+   snaps it into place without transition (.no-motion), then subsequent
+   moves animate. Inset 4px to match the list padding so it never touches
+   the list edges. */
+.dropdown-hover-pill {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 0;
+    height: 0;
+    background-color: rgba(0, 0, 0, 0.07);
+    border-radius: 6px;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        top 0.18s cubic-bezier(0.3, 0.9, 0.4, 1),
+        height 0.18s cubic-bezier(0.3, 0.9, 0.4, 1),
+        opacity 0.12s ease;
+}
+
+.dropdown-hover-pill.visible {
+    opacity: 1;
+}
+
+.dropdown-hover-pill.no-motion {
+    transition: opacity 0.12s ease;
+}
+
+/* local font option divider: drawn as a floating hairline in the gap above
+   the row (::before) instead of a border-top on the row itself, so the
+   hover pill keeps a symmetric shape over this item rather than swallowing
+   an asymmetric padding-top. */
 .dropdown-item[data-value="font-select"] {
-    border-top: 1px solid #e4e4e4;
-    margin-top: 4px;
-    padding-top: 12px;
+    margin-top: 9px;
+}
+
+.dropdown-item[data-value="font-select"]::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 /* floating padding bar */
@@ -586,6 +625,34 @@
 }
 
 /* ====================================================================
+   Toggle setting row (title + description on the left, switch on the right)
+   ==================================================================== */
+.setting-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+}
+
+.setting-toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0; /* let the description wrap instead of pushing the switch */
+}
+
+.setting-toggle-title {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.setting-toggle-desc {
+    font-size: 0.85rem;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+/* ====================================================================
    Backup toggle switch
    ==================================================================== */
 .toggle-switch {
@@ -789,15 +856,89 @@ input[type="password"].path-text-input {
     color: #868e96;
     line-height: 1.45;
 }
-#snapshot-card .custom-dropdown {
-    margin-top: 0;
-    width: 190px;
+/* Snapshot mode segmented control: a long track holding both options, with a
+   white thumb that slides over the selected one. Thumb movement is a pure
+   transform (no left/width animation) so it stays on the compositor. The
+   two halves are equal width, which keeps the slide a simple translateX of
+   the thumb's own width. */
+.segmented-control {
+    position: relative;
+    display: flex;
+    width: 240px;
     flex-shrink: 0;
+    padding: 3px;
+    box-sizing: border-box;
+    background-color: #dfe2e6;
+    border-radius: 9px;
+}
+
+.segmented-thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    background-color: #ffffff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: transform 0.25s cubic-bezier(0.3, 0.9, 0.4, 1);
+    pointer-events: none;
+}
+
+/* translateX(100%) moves the thumb by its own width (50% - 3px), landing its
+   left edge exactly at the track midline. */
+.segmented-control[data-value="daily"] .segmented-thumb {
+    transform: translateX(100%);
+}
+
+.segment-option {
+    position: relative; /* above the thumb */
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #868e96;
+    cursor: pointer;
+    white-space: nowrap;
+    transform: scale(0.92);
+    transition:
+        color 0.25s ease,
+        transform 0.25s cubic-bezier(0.3, 0.9, 0.4, 1);
+}
+
+.segmented-control .segment-option.active {
+    color: #212529;
+    font-weight: 600;
+    transform: scale(1);
+    cursor: default;
+}
+
+.segmented-control .segment-option:not(.active):hover {
+    color: #495057;
 }
 .snapshot-keep-input {
     width: 74px;
     flex: none;
     text-align: center;
+    /* The generic .path-text-input gray (#f1f3f5) all but vanishes on the
+       #ededed card. Match the Restore buttons instead (white surface,
+       #ced4da border) so the field reads as an actual control, with the
+       slider blue on focus. */
+    background: #ffffff;
+    border-color: #ced4da;
+    color: #212529;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.snapshot-keep-input:focus {
+    border-color: #186cd9;
+    box-shadow: 0 0 0 3px rgba(24, 108, 217, 0.12);
 }
 /* Hide number-input spinners; the value is small and typed, and the default
    spinners read as visual noise against the flat inputs used elsewhere. */
