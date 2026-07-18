@@ -463,20 +463,76 @@ pub fn search_content_in_vault(
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────
-#[napi]
-pub fn create_vault_directory() -> Result<String> {
-  let mut doc_dir = dirs::document_dir().ok_or_else(|| err("No document dir".into()))?;
-  doc_dir.push("Markdown Vault");
+// Create the vault's subfolders, then prove the location is actually usable
+// by writing a file into it.
+//
+// The write probe is not paranoia: on Windows a directory can be created (or
+// already exist) and still reject writes -- Defender's Controlled Folder
+// Access does exactly that to Documents for unsigned apps, and returns
+// misleading error codes while doing it. Without the probe we'd hand back a
+// vault path that fails on the first note save instead of at startup, where
+// the caller can still fall back or ask the user.
+fn make_vault_dirs(vault: &Path) -> std::result::Result<String, String> {
   for sub in ["", "images", ".backup", ".conf"] {
-    let mut d = doc_dir.clone();
+    let mut d = vault.to_path_buf();
     if !sub.is_empty() {
       d.push(sub);
     }
     if !d.exists() {
-      fs::create_dir_all(&d).map_err(|x| err(x.to_string()))?;
+      fs::create_dir_all(&d).map_err(|e| format!("{e} (raw={:?})", e.raw_os_error()))?;
     }
   }
-  Ok(doc_dir.to_string_lossy().replace('\\', "/"))
+  let probe = vault.join(".conf").join(".write-test");
+  fs::write(&probe, b"ok")
+    .map_err(|e| format!("not writable: {e} (raw={:?})", e.raw_os_error()))?;
+  let _ = fs::remove_file(&probe);
+
+  Ok(vault.to_string_lossy().replace('\\', "/"))
+}
+
+/// Create the vault at its default location (<Documents>/Markdown Vault).
+///
+/// Errs rather than silently relocating: the caller decides what to do next
+/// (ask the user to pick a folder). A notes app that quietly moves the vault
+/// somewhere else leaves the user unable to find their own files.
+#[napi]
+pub fn create_vault_directory() -> Result<String> {
+  let base = dirs::document_dir()
+    .or_else(|| dirs::home_dir().map(|h| h.join("Documents")))
+    .ok_or_else(|| err("No document dir".into()))?;
+
+  // The known-folder path is whatever the registry says, existing or not.
+  fs::create_dir_all(&base).map_err(|e| err(format!("Cannot create {}: {e}", base.display())))?;
+
+  let vault = base.join("Markdown Vault");
+  make_vault_dirs(&vault).map_err(|e| err(format!("{}: {e}", vault.display())))
+}
+
+/// Create a vault under a folder the user picked. The vault is a "Markdown
+/// Vault" subfolder of that choice, not the folder itself: the picker lets
+/// people select somewhere broad like Desktop or a whole drive root, and
+/// scattering images/, .backup/ and .conf/ directly into it would be rude.
+/// The returned path is the subfolder, which is what becomes the workspace.
+#[napi]
+pub fn create_vault_at(path: String) -> Result<String> {
+  let base = PathBuf::from(&path);
+  fs::create_dir_all(&base).map_err(|e| err(format!("Cannot create {}: {e}", base.display())))?;
+
+  let vault = base.join("Markdown Vault");
+  make_vault_dirs(&vault).map_err(|e| err(format!("{}: {e}", vault.display())))
+}
+
+/// Check that a previously saved vault path is still usable. Recreates any
+/// missing subfolder (images/.backup/.conf) but never invents the vault root
+/// itself -- if the root is gone the user moved or deleted it, and silently
+/// recreating an empty vault there would hide that.
+#[napi]
+pub fn verify_vault(path: String) -> Result<String> {
+  let vault = PathBuf::from(&path);
+  if !vault.is_dir() {
+    return Err(err(format!("Vault folder is missing: {}", vault.display())));
+  }
+  make_vault_dirs(&vault).map_err(|e| err(format!("{}: {e}", vault.display())))
 }
 
 #[napi]
@@ -843,13 +899,24 @@ pub fn write_file_content(vault_path: String, file_path: String, content: String
 //   3. next to (or under resources/ next to) the executable, for the packaged
 //      app, where current_exe is the app binary and cwd is anything
 //   4. bare "7zzs" and let PATH resolve it
+// The bundled binaries keep their target-triple suffix (see main.js's
+// sevenzipPath, which sets SEVENZIP_PATH from the same names). These consts
+// are the fallback for when that env var isn't set -- notably in the renderer
+// process, which loads this addon separately from main.
+#[cfg(target_os = "windows")]
+const SEVENZIP_NAME: &str = "7zzs-x86_64-pc-windows-msvc.exe";
+#[cfg(target_os = "macos")]
+const SEVENZIP_NAME: &str = "7zzs-aarch64-apple-darwin";
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+const SEVENZIP_NAME: &str = "7zzs-x86_64-unknown-linux-gnu";
+
 fn sevenzip_bin() -> PathBuf {
   if let Ok(p) = std::env::var("SEVENZIP_PATH") {
     if !p.is_empty() {
       return PathBuf::from(p);
     }
   }
-  let dev = PathBuf::from("bin").join("7zzs");
+  let dev = PathBuf::from("bin").join(SEVENZIP_NAME);
   if dev.exists() {
     // Must be absolute: run_backup launches 7z with current_dir(vault), and a
     // relative program path would be resolved against the *child's* cwd -- the
@@ -861,10 +928,10 @@ fn sevenzip_bin() -> PathBuf {
   if let Ok(exe) = std::env::current_exe() {
     if let Some(dir) = exe.parent() {
       for cand in [
-        dir.join("7zzs"),
-        dir.join("bin").join("7zzs"),
-        dir.join("resources").join("7zzs"),
-        dir.join("resources").join("bin").join("7zzs"),
+        dir.join(SEVENZIP_NAME),
+        dir.join("bin").join(SEVENZIP_NAME),
+        dir.join("resources").join(SEVENZIP_NAME),
+        dir.join("resources").join("bin").join(SEVENZIP_NAME),
       ] {
         if cand.exists() {
           return cand;
@@ -872,7 +939,7 @@ fn sevenzip_bin() -> PathBuf {
       }
     }
   }
-  PathBuf::from("7zzs")
+  PathBuf::from(SEVENZIP_NAME)
 }
 
 fn backup_dir(vault_path: &str) -> PathBuf {

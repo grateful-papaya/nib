@@ -220,7 +220,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile("src/index.html");
-  mainWindow.webContents.openDevTools(); // 디버깅 필요할 때만
+  //mainWindow.webContents.openDevTools(); // 디버깅 필요할 때만
 
   // Safety net: if any http(s) link tries to open a new window or navigate the
   // app frame away, send it to the system default browser instead.
@@ -335,6 +335,22 @@ ipcMain.handle("dialog-open", async (_e, options) => {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+});
+
+// ── Vault folder picker ─────────────────────────────────────────────────────
+// Used when the default vault location can't be written to (Windows
+// Controlled Folder Access, a redirected/broken Documents folder, corporate
+// policy), and from Settings when the user wants to move the vault. Returns a
+// forward-slash path to match what the Rust side hands back, or null if
+// canceled. "createDirectory" lets the user make a new folder from inside the
+// dialog instead of having to bail out and use Explorer first.
+ipcMain.handle("pick-vault-folder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose a folder for your notes",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0].replace(/\\/g, "/");
 });
 
 // ── File watcher ────────────────────────────────────────────────────────────

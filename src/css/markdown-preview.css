@@ -30,8 +30,12 @@
     font-size: 1.02em;
 }
 .cm-md-h6 {
+    /* Just under body size — h6 differentiates by weight (700) and the
+       heading line's own spacing, not by a lower-contrast color. An earlier
+       revision grayed it to #6b7280 to signal "lowest level", but t.heading6
+       spans the heading TEXT, not just the "######" mark, so the whole title
+       faded out. Contrast is not a hierarchy tool for real content. */
     font-size: 0.95em;
-    color: #6b7280;
 }
 
 /* ── Heading vertical rhythm ───────────────────────────────────────────────

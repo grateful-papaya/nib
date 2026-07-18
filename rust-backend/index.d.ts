@@ -36,6 +36,20 @@ export declare function createNewFile(parentPath: string, fileName: string): str
 
 export declare function createNewFolder(parentPath: string, folderName: string): string
 
+/**
+ * Create a vault at a folder the user picked. The picked folder becomes the
+ * vault itself -- no "Markdown Vault" subfolder -- since the user already
+ * chose exactly where they want it.
+ */
+export declare function createVaultAt(path: string): string
+
+/**
+ * Create the vault at its default location (<Documents>/Markdown Vault).
+ *
+ * Errs rather than silently relocating: the caller decides what to do next
+ * (ask the user to pick a folder). A notes app that quietly moves the vault
+ * somewhere else leaves the user unable to find their own files.
+ */
 export declare function createVaultDirectory(): string
 
 export declare function deleteFileOrFolder(targetPath: string): void
@@ -124,5 +138,13 @@ export interface SnapshotInfo {
 }
 
 export declare function startVaultWatcher(vaultPath: string, callback: ((err: Error | null, ) => void)): void
+
+/**
+ * Check that a previously saved vault path is still usable. Recreates any
+ * missing subfolder (images/.backup/.conf) but never invents the vault root
+ * itself -- if the root is gone the user moved or deleted it, and silently
+ * recreating an empty vault there would hide that.
+ */
+export declare function verifyVault(path: string): string
 
 export declare function writeFileContent(vaultPath: string, filePath: string, content: string): void

@@ -1,5 +1,22 @@
 const { contextBridge, ipcRenderer } = require("electron");
+const path = require("path");
 const backend = require("./rust-backend/index.js");
+
+// The addon is loaded separately in this process, so main.js setting
+// SEVENZIP_PATH doesn't reach it -- and backupOnQuit() is called from here,
+// not from main. Set the same value again. (Keep in sync with main.js's
+// sevenzipPath(); the Rust side has matching per-platform fallbacks too.)
+function sevenzipPath() {
+  const dir = path.join(__dirname, "bin");
+  if (process.platform === "win32") {
+    return path.join(dir, "7zzs-x86_64-pc-windows-msvc.exe");
+  }
+  if (process.platform === "darwin") {
+    return path.join(dir, "7zzs-aarch64-apple-darwin");
+  }
+  return path.join(dir, "7zzs-x86_64-unknown-linux-gnu");
+}
+process.env.SEVENZIP_PATH = sevenzipPath();
 
 // ── Field-name translation (napi camelCases struct fields) ──────────────────
 // napi gives FileNode.isDir / AppSettings.fontFamily; the app was written
@@ -74,7 +91,22 @@ const subscribeWindowSquared = makeStateChannel("window-squared-changed");
 // Each fn takes the same { ... } object the call sites already pass, so the
 // migration is a mechanical rename: invoke("get_file_tree", a) -> api.getFileTree(a).
 const api = {
+  // ── Vault location ───────────────────────────────────────────────────────
+  // createVaultDirectory uses the default spot (<Documents>/Markdown Vault)
+  // and throws if it isn't writable; createVaultAt takes a folder the user
+  // picked and uses it as the vault root directly; verifyVault re-checks a
+  // remembered path on startup. All three probe writability before returning,
+  // so a path that comes back is one that actually works.
   createVaultDirectory: () => backend.createVaultDirectory(),
+  createVaultAt: ({ path: p }) => backend.createVaultAt(p),
+  verifyVault: ({ path: p }) => backend.verifyVault(p),
+
+  // Folder picker for the two cases above. Returns a path, or null if canceled.
+  pickVaultFolder: () => ipcRenderer.invoke("pick-vault-folder"),
+
+  // "win32" | "darwin" | "linux". The renderer needs this to decide whether
+  // the default vault location is even worth attempting (see resolveVaultPath).
+  platform: process.platform,
 
   getFileTree: async ({ vaultPath }) => {
     const r = await backend.getFileTree(vaultPath);
