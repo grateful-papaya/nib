@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: local-media:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"
+        />
+        <title>Document</title>
+        <!-- Single ES-module entry point. app.js imports the other 7 modules;
+             each still loads exactly once, in dependency order. -->
+        <script type="module" src="js/app.js"></script>
+
+        <link rel="stylesheet" href="css/base.css" />
+        <link rel="stylesheet" href="css/layout.css" />
+        <link rel="stylesheet" href="css/sidebar.css" />
+        <link rel="stylesheet" href="css/settings.css" />
+        <link rel="stylesheet" href="css/components.css" />
+        <link rel="stylesheet" href="css/markdown-preview.css" />
+        <link rel="stylesheet" href="css/scrollbar.css" />
+    </head>
+    <body>
+        <div class="window">
+            <div class="window-controls" data-tauri-drag-region>
+                <button type="button" class="window-btn" id="menu-btn">
+                    <img src="assets/menu.svg" alt="Menu" />
+                </button>
+                <div id="editor-stats" class="editor-stats hidden">
+                    <div class="stats-trigger">
+                        <span id="stat-chars">0</span>
+                        <span class="stat-sep"> · </span>
+                        <span id="stat-line">1</span>
+                        <span class="stat-sep">/</span>
+                        <span id="stat-total">1</span>
+                    </div>
+
+                    <div class="stats-tooltip">
+                        <div class="tooltip-row">
+                            <span>Characters</span
+                            ><span id="tooltip-chars-with-space">0</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span>Chars (no space)</span
+                            ><span id="tooltip-chars-no-space">0</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span>Words</span><span id="tooltip-words">0</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span>Total Lines</span
+                            ><span id="tooltip-total-lines">0</span>
+                        </div>
+                        <div class="tooltip-divider"></div>
+                        <div class="tooltip-row select-row">
+                            <span>Selection</span
+                            ><span id="tooltip-selection">-</span>
+                        </div>
+                        <div class="tooltip-row">
+                            <span>File Size</span
+                            ><span id="tooltip-file-size">0 Bytes</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="save-indicator" class="save-indicator hidden">
+                    <svg viewBox="0 0 24 24" width="14" height="14">
+                        <!-- progress ring -->
+                        <circle
+                            class="save-ring"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            fill="none"
+                            stroke="#186cd9"
+                            stroke-width="2.5"
+                            stroke-dasharray="63"
+                            stroke-dashoffset="63"
+                            stroke-linecap="round"
+                            transform="rotate(-90 12 12)"
+                        />
+                        <!-- checkmark -->
+                        <polyline
+                            class="save-check"
+                            points="6,12 10,16 18,8"
+                            fill="none"
+                            stroke="#186cd9"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            opacity="0"
+                        />
+                    </svg>
+                </div>
+
+                <!-- ============================================================
+                     Titlebar search bar (Firefox unified search-bar style).
+                     Fills the remaining titlebar space between the left-side
+                     stats/save-indicator cluster and the right-side window
+                     controls. The scope dropdown (all docs / current doc)
+                     opens in-place directly beneath the bar itself — nothing
+                     slides the bar or the rest of the titlebar downward.
+                     ============================================================ -->
+                <!-- ============================================================
+                     Titlebar bar: two segments sharing the flex:1 space.
+                     One is always expanded, the other collapses to a square
+                     button (same height, only width shrinks). mode-path:
+                     breadcrumb expanded + draggable, search collapsed to a
+                     square icon. mode-search: the current search UI expanded,
+                     breadcrumb collapsed to a square home button.
+                     ============================================================ -->
+                <div class="titlebar-bar mode-path" id="titlebar-bar">
+                    <div
+                        class="titlebar-path-segment"
+                        id="titlebar-path-segment"
+                        title="Current file path"
+                    >
+                        <img
+                            class="path-home-icon"
+                            src="assets/home.svg"
+                            alt=""
+                        />
+                        <span
+                            class="titlebar-path-text"
+                            id="titlebar-path-text"
+                        ></span>
+                    </div>
+
+                    <div class="titlebar-search-bar" id="titlebar-search-bar">
+                        <img
+                            class="titlebar-search-collapsed-icon"
+                            src="assets/search.svg"
+                            alt=""
+                        />
+                        <div
+                            class="titlebar-search-scope"
+                            id="titlebar-search-scope"
+                        >
+                            <button
+                                type="button"
+                                class="titlebar-search-scope-btn"
+                                id="titlebar-search-scope-btn"
+                                title="Search scope"
+                            >
+                                <img src="assets/search.svg" alt="" />
+                                <img
+                                    class="scope-caret"
+                                    src="assets/arrow-down.svg"
+                                    alt=""
+                                />
+                            </button>
+                            <div
+                                class="titlebar-search-scope-menu"
+                                id="titlebar-search-scope-menu"
+                            >
+                                <div class="titlebar-scope-menu-label">
+                                    Search scope
+                                </div>
+                                <div
+                                    class="titlebar-scope-option"
+                                    data-scope="all"
+                                >
+                                    <img
+                                        class="scope-check"
+                                        src="assets/check.svg"
+                                        alt=""
+                                    />
+                                    <span>Search all documents</span>
+                                </div>
+                                <div
+                                    class="titlebar-scope-option"
+                                    data-scope="current"
+                                >
+                                    <img
+                                        class="scope-check"
+                                        src="assets/check.svg"
+                                        alt=""
+                                    />
+                                    <span>Search current document</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input
+                            type="text"
+                            class="titlebar-search-input"
+                            id="titlebar-search-input"
+                            placeholder="Search..."
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+
+                        <div
+                            class="titlebar-search-count"
+                            id="titlebar-search-count"
+                        ></div>
+
+                        <div
+                            class="titlebar-search-actions"
+                            id="titlebar-search-actions"
+                        >
+                            <button
+                                type="button"
+                                class="titlebar-search-action-btn nav-prev"
+                                id="titlebar-search-prev-btn"
+                                title="Previous match"
+                            >
+                                <img src="assets/arrow-down.svg" alt="prev" />
+                            </button>
+                            <button
+                                type="button"
+                                class="titlebar-search-action-btn nav-next"
+                                id="titlebar-search-next-btn"
+                                title="Next match"
+                            >
+                                <img src="assets/arrow-down.svg" alt="next" />
+                            </button>
+                            <div class="titlebar-search-divider"></div>
+                            <button
+                                type="button"
+                                class="titlebar-search-action-btn"
+                                id="titlebar-search-case-btn"
+                                title="Match case"
+                            >
+                                <img src="assets/case-sensitive.svg" alt="Aa" />
+                            </button>
+                        </div>
+
+                        <!-- results dropdown for "all documents" scope; opens
+                         in-place beneath the bar, same as the scope menu -->
+                        <div
+                            class="titlebar-search-results hidden"
+                            id="titlebar-search-results"
+                        ></div>
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    class="window-btn hidden"
+                    id="read-mode-btn"
+                    title="Toggle Reading Mode"
+                >
+                    <img src="assets/read_mode.svg" alt="Read Mode" />
+                </button>
+                <button type="button" class="window-btn" id="min-btn">
+                    <img src="assets/minimize-window.svg" alt="Minimize" />
+                </button>
+                <button type="button" class="window-btn" id="quit-btn">
+                    <img src="assets/close-window.svg" alt="Quit" />
+                </button>
+            </div>
+
+            <div class="app-container" id="app-container">
+                <div class="sidebar" id="sidebar">
+                    <div class="sidebar-action-group" id="sidebar-action-group">
+                        <div class="sidebar-search" id="sidebar-search">
+                            <button
+                                type="button"
+                                class="add-btn search-toggle-btn"
+                                id="search-toggle-btn"
+                                title="Search"
+                            >
+                                <img src="assets/search.svg" alt="search" />
+                            </button>
+                            <input
+                                type="text"
+                                class="sidebar-search-input"
+                                id="sidebar-search-input"
+                                placeholder="Search files..."
+                                autocomplete="off"
+                                spellcheck="false"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            class="add-btn"
+                            id="add-folder-btn"
+                        >
+                            <img src="assets/add_folder.svg" alt="add-folder" />
+                        </button>
+                        <button type="button" class="add-btn" id="add-file-btn">
+                            <img src="assets/add_file.svg" alt="add-file" />
+                        </button>
+                    </div>
+
+                    <div class="file-tree-container"></div>
+                    <div
+                        class="search-results-container hidden"
+                        id="search-results-container"
+                    ></div>
+
+                    <!-- Outline (TOC) panel: absolutely positioned layer that
+                         slides in OVER the file-tree content (see toc.js /
+                         .sidebar-toc-panel in sidebar.css). Stops above the
+                         footer so settings/export stay reachable. -->
+                    <div class="sidebar-toc-panel" id="sidebar-toc-panel">
+                        <!-- Outline (top): height driven by --toc-split. -->
+                        <div
+                            class="toc-section toc-outline-section"
+                            id="toc-outline-section"
+                        >
+                            <div class="toc-header">Outline</div>
+                            <div
+                                class="toc-list-container"
+                                id="toc-list-container"
+                            ></div>
+                        </div>
+
+                        <!-- Horizontal split between the outline (top) and the
+                             references (bottom). Drag vertically to change the
+                             ratio; its right-end corner sits over the sidebar
+                             edge, so grabbing it drives BOTH the split ratio
+                             and the sidebar width at once (see resize.js
+                             initTocSplitResizer). -->
+                        <div class="toc-vsplit" id="toc-vsplit">
+                            <div
+                                class="toc-vsplit-corner"
+                                id="toc-vsplit-corner"
+                                title="Drag to resize both"
+                            ></div>
+                        </div>
+
+                        <!-- References (bottom): link / image / footnote
+                             definitions found in the current document. -->
+                        <div
+                            class="toc-section toc-references-section"
+                            id="toc-references-section"
+                        >
+                            <div class="toc-header">References</div>
+                            <div
+                                class="toc-list-container toc-refs-container"
+                                id="toc-refs-container"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div class="sidebar-footer">
+                        <button
+                            type="button"
+                            class="sidebar-btn"
+                            id="settings-btn"
+                            title="Settings"
+                        >
+                            <img src="assets/settings.svg" alt="Settings" />
+                        </button>
+
+                        <button
+                            type="button"
+                            class="sidebar-btn hidden"
+                            id="export-btn"
+                            title="Export to PDF"
+                        >
+                            <img src="assets/export.svg" alt="Export" />
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-resizer" id="sidebar-resizer"></div>
+                <div class="content" id="main-view">
+                    <div class="main-tab-content" id="main-tab-content">
+                        <div id="welcome-message" class="welcome-container">
+                            <div class="welcome-action-box">
+                                <button
+                                    id="welcome-new-file-btn"
+                                    class="welcome-btn"
+                                >
+                                    <img
+                                        src="assets/add_file.svg"
+                                        alt="file"
+                                        class="welcome-btn-icon"
+                                    />
+                                    <span>New File</span>
+                                </button>
+                                <button
+                                    id="welcome-new-folder-btn"
+                                    class="welcome-btn"
+                                >
+                                    <img
+                                        src="assets/add_folder.svg"
+                                        alt="folder"
+                                        class="welcome-btn-icon"
+                                    />
+                                    <span>New Folder</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div
+                            class="file-editor-container hidden"
+                            id="file-editor"
+                        >
+                            <div
+                                class="editor-content-inner"
+                                id="editor-content-inner"
+                            >
+                                <input
+                                    type="text"
+                                    class="editor-title"
+                                    id="editor-title"
+                                />
+                                <div class="editor-body" id="editor-body"></div>
+                                <div class="editor-spacer"></div>
+                            </div>
+                        </div>
+                        <div
+                            id="image-viewer"
+                            class="image-viewer-container hidden"
+                        >
+                            <div class="panzoom-wrapper">
+                                <img
+                                    id="viewer-image"
+                                    src=""
+                                    alt="Viewed Image"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-overlay" id="settings-view">
+                <div class="settings-modal">
+                    <div class="settings-sidebar">
+                        <ul class="settings-menu">
+                            <li
+                                class="menu-item active"
+                                data-target="panel-general"
+                            >
+                                General
+                            </li>
+                            <li
+                                class="menu-item"
+                                data-target="panel-design"
+                            >
+                                Appearance
+                            </li>
+                            <li class="menu-item" data-target="panel-backup">
+                                Data
+                            </li>
+                            <li class="menu-item" data-target="panel-about">
+                                About
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="settings-main">
+                        <div class="settings-header">
+                            <button type="button" class="settings-close-btn">
+                                <img
+                                    src="assets/close-window.svg"
+                                    alt="Close"
+                                />
+                            </button>
+                        </div>
+
+                        <div class="settings-body">
+                            <div
+                                id="panel-general"
+                                class="settings-panel active"
+                            >
+                                <h2>Editing</h2>
+                                <div class="setting-card">
+                                    <div class="setting-toggle-row">
+                                        <div class="setting-toggle-text">
+                                            <span class="setting-toggle-title"
+                                                >Show raw Markdown on
+                                                hover</span
+                                            >
+                                            <span class="setting-toggle-desc"
+                                                >Reveal the underlying Markdown
+                                                in a tooltip when you hover a
+                                                rendered link, image, or
+                                                formula.</span
+                                            >
+                                        </div>
+                                        <label class="nib-switch">
+                                            <input
+                                                type="checkbox"
+                                                id="raw-tooltip-toggle"
+                                                checked
+                                            />
+                                            <span
+                                                class="nib-switch-track"
+                                            ></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div
+                                id="panel-design"
+                                class="settings-panel"
+                            >
+                                <h2>Font</h2>
+                                <div class="setting-card">
+                                    <div class="setting-row">
+                                        <label
+                                            for="font-dropdown"
+                                            class="setting-label"
+                                            >Font Family</label
+                                        >
+                                        <div
+                                            class="custom-dropdown"
+                                            id="font-dropdown"
+                                        >
+                                            <div
+                                                class="dropdown-selected"
+                                                id="dropdown-selected-val"
+                                                data-value="pretendard"
+                                            >
+                                                <span
+                                                    class="dropdown-selected-label"
+                                                    >Pretendard</span
+                                                >
+                                                <img
+                                                    class="dropdown-arrow-icon"
+                                                    src="assets/arrow-down.svg"
+                                                    alt=""
+                                                />
+                                            </div>
+                                            <div class="dropdown-list-wrapper">
+                                                <ul class="dropdown-list">
+                                                    <li
+                                                        class="dropdown-item"
+                                                        data-value="pretendard"
+                                                    >
+                                                        Pretendard
+                                                    </li>
+                                                    <li
+                                                        class="dropdown-item"
+                                                        data-value="system"
+                                                    >
+                                                        System Font
+                                                    </li>
+                                                    <li
+                                                        class="dropdown-item"
+                                                        data-value="font-select"
+                                                    >
+                                                        Local File...
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        class="setting-row"
+                                        id="fontsize-slider-row"
+                                    >
+                                        <label class="setting-label"
+                                            >Font Size</label
+                                        >
+                                        <input
+                                            type="range"
+                                            id="editor-fontsize-slider"
+                                            min="9"
+                                            max="30"
+                                            step="1"
+                                            value="16"
+                                        />
+                                        <span id="editor-fontsize-value"
+                                            >16px</span
+                                        >
+                                    </div>
+                                </div>
+
+                                <h2>Editor</h2>
+                                <div class="setting-card">
+                                    <div
+                                        class="setting-row"
+                                        id="padding-slider-row"
+                                    >
+                                        <label class="setting-label"
+                                            >Padding</label
+                                        >
+                                        <input
+                                            type="range"
+                                            id="editor-padding-slider"
+                                            min="5"
+                                            max="30"
+                                            step="1"
+                                            value="12"
+                                        />
+                                        <span id="editor-padding-value"
+                                            >12%</span
+                                        >
+                                    </div>
+
+                                    <div
+                                        class="setting-row"
+                                        id="linespacing-slider-row"
+                                    >
+                                        <label class="setting-label"
+                                            >Line Spacing</label
+                                        >
+                                        <input
+                                            type="range"
+                                            id="editor-linespacing-slider"
+                                            min="1.0"
+                                            max="3.0"
+                                            step="0.1"
+                                            value="1.6"
+                                        />
+                                        <span id="editor-linespacing-value"
+                                            >1.6</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="panel-backup" class="settings-panel">
+                                <h2>Backup</h2>
+
+                                <!-- Backup snapshots: copies of the rolling
+                                     archive under .backup/snapshots/. Two
+                                     modes -- a new snapshot per quit, or one
+                                     per day holding that day's last version.
+                                     The only tunable is how many to keep.
+                                     Wired in app.js; persisted as
+                                     backup_snapshot_mode / _keep. -->
+                                <div class="setting-card" id="snapshot-card">
+                                    <div class="setting-row snapshot-row">
+                                        <div class="snapshot-label-block">
+                                            <label class="setting-label"
+                                                >Snapshots</label
+                                            >
+                                            <p class="snapshot-desc">
+                                                Copies of the vault backup,
+                                                kept inside the vault
+                                            </p>
+                                        </div>
+                                        <div
+                                            class="custom-dropdown"
+                                            id="snapshot-mode-dropdown"
+                                        >
+                                            <div
+                                                class="dropdown-selected"
+                                                id="snapshot-mode-selected-val"
+                                                data-value="quit"
+                                            >
+                                                <span
+                                                    class="dropdown-selected-label"
+                                                    >Every quit</span
+                                                >
+                                                <img
+                                                    class="dropdown-arrow-icon"
+                                                    src="assets/arrow-down.svg"
+                                                    alt=""
+                                                />
+                                            </div>
+                                            <div class="dropdown-list-wrapper">
+                                                <ul class="dropdown-list">
+                                                    <li
+                                                        class="dropdown-item"
+                                                        data-value="quit"
+                                                    >
+                                                        Every quit
+                                                    </li>
+                                                    <li
+                                                        class="dropdown-item"
+                                                        data-value="daily"
+                                                    >
+                                                        Last of each day
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="setting-row snapshot-row">
+                                        <div class="snapshot-label-block">
+                                            <label class="setting-label"
+                                                >Snapshots to keep</label
+                                            >
+                                            <p class="snapshot-desc">
+                                                Oldest are deleted
+                                                automatically &middot; 0 turns
+                                                snapshots off
+                                            </p>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            id="snapshot-keep-input"
+                                            class="path-text-input snapshot-keep-input"
+                                            min="0"
+                                            value="5"
+                                        />
+                                    </div>
+                                </div>
+
+                                <h2 class="settings-subhead">Restore</h2>
+                                <div
+                                    class="setting-card"
+                                    id="restore-card"
+                                >
+                                    <div class="snapshot-label-block">
+                                        <label class="setting-label"
+                                            >Versions</label
+                                        >
+                                        <p class="snapshot-desc">
+                                            Restoring replaces every document
+                                            with that version. The current
+                                            state is snapshotted first, so
+                                            this is always undoable.
+                                        </p>
+                                    </div>
+                                    <!-- Populated by app.js when this tab is
+                                         opened (populateRestoreList). -->
+                                    <ul
+                                        class="restore-list"
+                                        id="restore-list"
+                                    ></ul>
+                                </div>
+                            </div>
+
+                            <div id="panel-about" class="settings-panel">
+                                <h2>About</h2>
+                                <h3>(name of app)</h3>
+                                <div class="about">
+                                    <div class="setting-card">
+                                        <p>Version: v0.0.1</p>
+                                        <p>Developer: grateful papaya</p>
+                                        <p>
+                                            Built with: Electron, CodeMirror6,
+                                            KaTeX
+                                        </p>
+                                        <p>
+                                            Contact:
+                                            <a href="https://google.com"
+                                                >some link</a
+                                            >
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toast-notification" id="apply-toast"></div>
+
+            <!-- Hover popup under the menu button: direct jump to either
+                 sidebar view. Positioned from JS (toc.js MenuPopup) just
+                 below the titlebar so it never overlaps the drag region. -->
+            <div id="menu-popup" class="menu-popup">
+                <div
+                    class="menu-popup-item"
+                    id="menu-popup-tree"
+                    data-view="tree"
+                >
+                    <img
+                        src="assets/close-folder.svg"
+                        alt=""
+                        class="menu-popup-icon"
+                    />
+                    <span>Files</span>
+                </div>
+                <div
+                    class="menu-popup-item"
+                    id="menu-popup-toc"
+                    data-view="toc"
+                >
+                    <img
+                        src="assets/outline.svg"
+                        alt=""
+                        class="menu-popup-icon"
+                    />
+                    <span>Outline</span>
+                </div>
+            </div>
+
+            <div id="sidebar-context-menu" class="context-menu">
+                <div class="context-menu-item" id="ctx-sidebar-newfile">
+                    <span>New File</span>
+                </div>
+                <div class="context-menu-item" id="ctx-sidebar-newfolder">
+                    <span>New Folder</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" id="ctx-sidebar-pin">
+                    <span>Pin</span>
+                </div>
+                <div class="context-menu-item" id="ctx-sidebar-unpin-all">
+                    <span>Unpin All</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" id="ctx-sidebar-reveal">
+                    <span>Reveal in Sidebar</span>
+                </div>
+                <div class="context-menu-item" id="ctx-sidebar-show-in-folder">
+                    <span>Show in File Explorer</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" id="ctx-sidebar-rename">
+                    <span>Rename</span>
+                </div>
+                <div class="context-menu-item" id="ctx-sidebar-duplicate">
+                    <span>Duplicate</span>
+                </div>
+                <div class="context-menu-item delete" id="ctx-sidebar-delete">
+                    <span>Trash</span>
+                </div>
+            </div>
+            <div id="main-context-menu" class="context-menu">
+                <div class="context-menu-item" id="ctx-main-cut">
+                    <span>Cut</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-copy">
+                    <span>Copy</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-paste">
+                    <span>Paste</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-selectall">
+                    <span>Select All</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" id="ctx-main-bold">
+                    <span>Bold</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-italic">
+                    <span>Italic</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-inline-code">
+                    <span>Inline Code</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" id="ctx-main-save">
+                    <span>Save Now</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-copy-path">
+                    <span>Copy File Path</span>
+                </div>
+                <div class="context-menu-divider"></div>
+                <div class="context-menu-item" id="ctx-main-reveal">
+                    <span>Reveal in Sidebar</span>
+                </div>
+                <div class="context-menu-item" id="ctx-main-show-in-folder">
+                    <span>Show in File Explorer</span>
+                </div>
+            </div>
+        </div>
+        <div id="file-meta-tooltip" class="file-meta-tooltip"></div>
+        <div id="raw-source-tooltip" class="raw-source-tooltip"></div>
+        <div id="custom-confirm-overlay" class="confirm-overlay hidden">
+            <div class="confirm-dialog" id="confirm-dialog">
+                <h3 id="confirm-title">Confirm</h3>
+                <p id="confirm-message">Are you sure?</p>
+                <div class="confirm-actions">
+                    <button id="confirm-cancel-btn" class="secondary-btn">
+                        Cancel
+                    </button>
+                    <button id="confirm-ok-btn" class="primary-btn warning-btn">
+                        Unpin All
+                    </button>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

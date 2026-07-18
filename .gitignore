@@ -1,0 +1,5 @@
+node_modules/
+squashfs-root/
+rust-backend/target/
+*.log
+.DS_Store

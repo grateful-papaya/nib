@@ -1,0 +1,75 @@
+/* ====================================================================
+   Toast notification
+   ==================================================================== */
+.toast-notification {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #343a40;
+    color: #f8f9fa;
+    padding: 12px 24px;
+    border-radius: 100px;
+    font-size: 1rem;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        bottom 0.25s ease,
+        opacity 0.25s ease;
+}
+
+.toast-notification.show {
+    bottom: 30px;
+    opacity: 1;
+}
+
+/* When the toast hosts an action button, lay message + button in a row and
+   allow interaction (the base toast disables pointer events). */
+.toast-notification:has(.toast-action-btn) {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    pointer-events: auto;
+}
+
+.toast-action-btn {
+    background: transparent;
+    border: none;
+    color: #74b3ff;
+    font-weight: 700;
+    font-size: 0.95rem;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: background 0.12s ease;
+}
+.toast-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.save-indicator {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    margin-left: 2px; /* spacing so it sits next to the character-count component */
+}
+
+.save-indicator.hidden {
+    display: none;
+}
+
+.save-ring {
+    transition: stroke-dashoffset 0.4s ease;
+}
+
+.save-check {
+    transition: opacity 0.2s ease;
+}

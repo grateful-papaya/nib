@@ -1,0 +1,36 @@
+[package]
+authors = ["Grateful papaya"]
+edition = "2021"
+name = "rust_backend"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3.0.0", features = ["async", "tokio_rt"] }
+napi-derive = "3.0.0"
+base64 = "0.22"
+notify = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+trash = "5"
+dirs = "5"
+encoding_rs = "0.8"
+
+# Timestamps for backup snapshot filenames (.backup/snapshots/vault_<stamp>.7z).
+# Local time, zero-padded so lexicographic order == chronological order.
+chrono = "0.4"
+
+# Retired along with the chunk/cloud backup engine: keyring (and its dbus
+# build dependency), reqwest, fastcdc, sha2, zstd, aes-gcm, argon2, rand.
+# The offline backup shells out to 7-Zip instead; nothing here touches the
+# network or the OS keychain any more.
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+strip = "symbols"

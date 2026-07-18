@@ -1,0 +1,1382 @@
+/* top-level window frame */
+.window {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: rgb(248, 248, 248);
+    border-radius: 16px;
+    /* clip, not hidden: still clips the custom frame corners (clip respects
+       border-radius exactly like hidden), but the box is no longer a scroll
+       container — so scrollIntoView()/focus() from descendants (sidebar tree
+       rows, editor content) can never scroll the app chrome. With hidden,
+       #apply-toast's bottom:-10px gave this box 10px of scrollable overflow
+       that revealInSidebar's old scrollIntoView actually consumed, shifting
+       everything inside the window up with no way back. */
+    overflow: clip;
+    box-sizing: border-box;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.06);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+/* 최대화 및 화면 분할 시 둥근 모서리 제거 */
+.window.squared {
+    border-radius: 0 !important;
+}
+
+.window.squared .window-controls {
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+}
+
+/* title bar */
+.window-controls {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 12px; /* normalize horizontal padding to 12px */
+    gap: 8px;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    box-sizing: border-box;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(0, 0, 0, 0.05) 0%,
+            rgba(0, 0, 0, 0) 40%,
+            transparent 100%
+        ),
+        #f0f0f0;
+    z-index: 1005;
+    -webkit-app-region: drag;
+}
+
+.window-btn,
+.editor-stats,
+#save-indicator {
+    -webkit-app-region: no-drag;
+}
+
+/* While the titlebar search results dropdown is open, neutralize the whole
+   titlebar drag region. The dropdown renders partly over this 40px-tall
+   drag area, and Electron drag regions swallow pointer events geometrically
+   (regardless of DOM nesting or z-index), which otherwise makes the
+   results scrollbar thumb — a fixed-position element on <body> overlapping
+   this rectangle — impossible to grab. Driven by a body class set directly
+   from JS (titlebar-search.js) rather than :has(), which didn't reliably
+   take effect here. */
+body.titlebar-results-open .window-controls {
+    -webkit-app-region: no-drag;
+}
+
+/* shared title-bar button base */
+button[type="button"] {
+    cursor: pointer;
+    transition:
+        background-color 0.2s ease,
+        opacity 0.2s ease;
+    background: transparent;
+    opacity: 0.6;
+}
+button[type="button"]:hover {
+    background-color: #d0d0d0;
+    opacity: 1;
+}
+
+/* centered main container */
+.welcome-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    /* blend with the default window background (#f8f9fa) */
+    background: transparent;
+}
+
+/* box wrapping the buttons */
+.welcome-action-box {
+    display: flex;
+    gap: 24px;
+}
+
+/* button toned to match the title bar and sidebar */
+.welcome-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    height: 160px;
+    /* base color from the title bar (#f0f0f0) */
+    background-color: #ffffff;
+    /* soft border matching surrounding UI */
+    border: 1px solid #e4e6eb;
+    border-radius: 16px;
+    /* dark gray for text readability */
+    color: #4a4a4a;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    transition:
+        background-color 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+        transform 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+        box-shadow 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+    gap: 12px;
+}
+
+/* hover: inset shadow and border color match */
+.welcome-btn:hover {
+    background-color: #f5f6f7;
+    border-color: #d1d4db;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+/* active (pressed) state */
+.welcome-btn:active {
+    transform: translateY(-1px);
+    background-color: #eceef1;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+}
+
+/* button icon size and opacity */
+.welcome-btn-icon {
+    width: 36px;
+    height: 36px;
+    opacity: 0.65;
+    transition: opacity 0.1s ease;
+}
+
+.welcome-btn:hover .welcome-btn-icon {
+    opacity: 0.9;
+}
+
+/* button label style */
+.welcome-btn span {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+}
+
+/* title-bar button positioning */
+#menu-btn,
+#min-btn,
+#quit-btn {
+    left: auto;
+    right: auto;
+}
+
+/* quit button hover emphasis */
+#quit-btn:hover {
+    background-color: #e57373;
+}
+
+/* title-bar button layout (more specific than button[type="button"]) */
+.window-btn {
+    position: relative; /* replaces previous absolute positioning */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 50%;
+    padding: 0;
+    flex-shrink: 0; /* keep button shape when the window shrinks */
+}
+
+.window-btn img {
+    width: 40%;
+    height: 40%;
+}
+
+/* main content area */
+.app-container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+}
+.main-tab-content {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.file-editor-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    overscroll-behavior-y: none;
+}
+
+.file-editor-container > * {
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    will-change: transform;
+}
+
+/* title input: transparent background, no border/outline */
+.editor-title {
+    position: absolute;
+    top: 40px; /* offset from the top of the scroller */
+    left: 0;
+    right: 0;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 40px var(--editor-padding, 12%); /* synced with the padding slider */
+    margin: 0; /* no fixed margin */
+    font-size: 1.8rem;
+    /* 750: the document title should out-weigh an h1 (700) without jumping all
+       the way to the 800 that **strong** now owns. Only reachable because the
+       @font-face declares the full wght range — see base.css. */
+    font-weight: 750;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+    z-index: 10; /* above the body text layer */
+}
+
+/* body text area: transparent, borderless, scrollable */
+.editor-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    outline: none;
+}
+
+.hidden {
+    display: none;
+}
+
+.editor-spacer {
+    display: none;
+}
+.editor-content-inner {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    will-change: transform; /* pre-allocate a GPU layer */
+    transform: translateY(0);
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.window .app-container .editor-body .cm-editor {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+}
+
+/* keep scroller full width so the scrollbar pins right */
+.window .app-container .editor-body .cm-scroller {
+    /* Vertical only. `overflow: auto` also opened a HORIZONTAL pan on the
+       whole editor, and this selector outweighs markdown-preview.css's
+       `.cm-editor .cm-scroller { overflow-x: hidden }` — so a long code
+       line panned the entire document sideways. Horizontal overflow is
+       handled exclusively inside fenced code blocks (each code line is its
+       own overflow-x container; see markdown-preview.css). */
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: inherit;
+    /* Side margins live HERE, not on .cm-content: drawSelection bounds its
+       full-line rectangles by contentDOM's rect, so content padding made
+       the selection highlight paint across the margins. The margins being
+       outside contentDOM means CM's own mouse handlers don't see margin
+       clicks — that gap is closed by the marginMouseDown extension in
+       markdown-preview.js, which forwards margin mousedowns into
+       contentDOM so CM's MouseSelection (not the browser's native
+       contenteditable drag, which can't cross widgets) drives every
+       selection. */
+    padding-left: var(--editor-padding, 12%);
+    padding-right: var(--editor-padding, 12%);
+    padding-top: 150px; /* top padding accounting for the title height */
+    position: relative; /* positioning context for the absolute title input */
+    box-sizing: border-box;
+}
+
+/* apply the padding variable only to the text layer */
+.window .app-container .editor-body .cm-content {
+    font-family: inherit;
+    /* Both fed by the settings sliders: UIManager.applyEditorFontSize /
+       applyEditorLineSpacing set --editor-font-size / --editor-line-height on
+       #editor-body (app.js), and this rule is what actually consumes them —
+       before this the two sliders were dead, only --editor-padding worked.
+       Fallbacks are the defaults shown in the settings panel. */
+    font-size: var(--editor-font-size, 1rem);
+    line-height: var(--editor-line-height, 1.6);
+    /* Korean line-breaking: keep-all breaks only at spaces (no mid-어절
+       wraps), which is the single biggest readability win for 한글 body copy.
+       overflow-wrap backstops the one failure mode — an unbroken run (long
+       URL, English identifier) wider than the line would otherwise overflow. */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 10px;
+    padding-bottom: 120px;
+    box-sizing: border-box;
+    /* .cm-scroller is a flex container and .cm-content its flex item. The
+       default `min-width: auto` makes a flex item refuse to shrink below its
+       content's min-content width — and a fenced-code line is `white-space:
+       pre` (unbreakable), so ONE long code line inflated that minimum and
+       stretched .cm-content (and every code-line background filling it)
+       rightward as you typed. The line's own overflow-x:auto never fired
+       because its containing block was always as wide as its text; overflow
+       doesn't shrink an ancestor's intrinsic size. min-width:0 removes the
+       automatic minimum (and width:100% fixes the flex base size), so code
+       lines become fixed-width boxes and long code pans INSIDE them. */
+    min-width: 0;
+    width: 100%;
+}
+
+/* reset any per-line padding */
+.window .app-container .editor-body .cm-line {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.window .app-container .editor-body .cm-gutters {
+    display: none;
+}
+
+/* remove the active-line highlight */
+.window .app-container .editor-body .cm-activeLine {
+    background-color: transparent;
+}
+
+/* ====================================================================
+   CodeMirror 6 selection color (#186cd9)
+   ==================================================================== */
+/* selection background when the editor is not focused */
+.window .app-container .editor-body .cm-editor .cm-selectionBackground {
+    background-color: rgba(24, 108, 217, 0.18);
+}
+
+/* selection background when the editor is focused */
+.window
+    .app-container
+    .editor-body
+    .cm-editor.cm-focused
+    .cm-selectionBackground {
+    background-color: rgba(24, 108, 217, 0.28);
+}
+
+/*override native ::selection styling */
+.window .app-container .editor-body .cm-editor ::selection {
+    background-color: rgba(24, 108, 217, 0.28);
+}
+
+/* ====================================================================
+   Image viewer layout
+   ==================================================================== */
+.image-viewer-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent; /* sync with the system theme */
+    overflow: hidden; /* keep the image from overflowing while dragging */
+}
+
+#viewer-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+#image-viewer.hidden,
+#file-editor.hidden,
+#welcome-message.hidden {
+    display: none;
+}
+/* positioning context for the stats tooltip */
+.editor-stats {
+    position: relative;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.45);
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    font-weight: 500;
+    z-index: 102;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.editor-stats:hover {
+    color: #212529; /* sharpen on hover like the window buttons */
+}
+
+.stats-trigger {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+/* push-notification-style mini tooltip */
+.stats-tooltip {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 6px;
+    background-color: #f6f6f6; /* matches sidebar.css .context-menu */
+    border: 1px solid #dcdcdc; /* matches sidebar.css .context-menu */
+    border-radius: 10px; /* matches sidebar.css .context-menu */
+    padding: 10px 12px;
+    min-width: 175px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); /* matches sidebar.css .context-menu */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-sizing: border-box;
+
+    /* animation and collapse control */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition:
+        opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+.editor-stats:hover .stats-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    font-size: 0.8rem;
+}
+
+/* left-hand metric label */
+.tooltip-row span:first-child {
+    color: #707070;
+    font-weight: 500;
+}
+
+/* right-hand live value */
+.tooltip-row span:last-child {
+    font-weight: 500;
+    color: #212529;
+}
+
+/* divider tone match */
+.tooltip-divider {
+    border-top: 1px solid rgba(0, 0, 0, 0.06); /* ported from .context-menu-divider */
+    margin: 2px 0;
+}
+
+/* keep the accent color highlight */
+.tooltip-row.select-row span:last-child {
+    color: #186cd9;
+}
+.stat-sep {
+    margin: 0 2px;
+}
+.editor-stats:hover .stats-tooltip,
+.editor-stats.open .stats-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* read-mode button active state */
+#read-mode-btn.active {
+    background-color: transparent; /* theme blue transparency mapping */
+}
+
+/* editor UI adjustments in reading mode */
+.file-editor-container.reading-mode .editor-title {
+    cursor: default;
+}
+
+.file-editor-container.reading-mode .cm-content {
+    cursor: default;
+}
+/* enlarge only the read-mode button */
+#read-mode-btn {
+    width: 28px; /* expand the clickable area */
+    height: 28px;
+}
+
+#read-mode-btn.active:hover {
+    background-color: #d0d0d0;
+    opacity: 0.6;
+}
+
+/* enlarge only the read-mode icon */
+#read-mode-btn img {
+    width: 50%; /* larger inner icon */
+    height: 50%;
+    transition: transform 0.15s ease;
+}
+
+/* subtle hover motion (optional) */
+#read-mode-btn:hover img {
+    transform: scale(1.05);
+}
+
+/* ─── Custom Confirm Dialog ─── */
+.confirm-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: saturate(50%) contrast(80%);
+    -webkit-backdrop-filter: saturate(50%) contrast(80%);
+    /* No border-radius/clip-path here: .window already clips its children
+       via overflow: hidden, and its own border-radius correctly toggles
+       between 16px (normal) and 0 (.window.squared, i.e. maximized/tiled).
+       Duplicating a fixed 16px radius here made the dim backdrop's corners
+       stay rounded even when the window was squared, leaving untouched,
+       non-dimmed corners visible in fullscreen/split-screen. */
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+.confirm-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.confirm-dialog {
+    background: #f8f9fa;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    width: 340px;
+    max-width: 90%;
+    /* Match .settings-modal's shadow weight/spread so every modal in the app
+       reads as the same elevation layer. */
+    box-shadow: 0 25px 36px rgba(0, 0, 0, 0.3);
+    transform: scale(0.96);
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.confirm-overlay.visible .confirm-dialog {
+    transform: scale(1);
+}
+
+/* Icon badge: same rounded-square language as .add-btn (8px radius, flat
+   off-white fill), tinted per dialog tone via .confirm-dialog--warning. */
+.confirm-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: #ededed;
+    margin-bottom: 14px;
+}
+
+.confirm-icon img {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.confirm-dialog--warning .confirm-icon {
+    background: rgba(229, 75, 75, 0.12);
+}
+
+.confirm-dialog h3 {
+    margin: 0 0 8px 0;
+    color: #212529;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.confirm-dialog p {
+    margin: 0 0 20px 0;
+    color: #495057;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Shared button base matches .settings-action-btn / .add-btn: 8px radius,
+   0.88rem label, the same hover-transition timing used across the app. */
+.confirm-actions button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+
+.confirm-actions .secondary-btn {
+    /* Sits on the dialog's #f8f9fa body, so give it a filled #ededed base
+       (the app's standard "card" surface) instead of white — white on
+       #f8f9fa reads as almost no contrast at all. */
+    background: #ededed;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: #495057;
+}
+
+.confirm-actions .secondary-btn:hover {
+    background: #e2e2e2;
+    border-color: rgba(0, 0, 0, 0.12);
+    color: #212529;
+}
+
+.confirm-actions .primary-btn {
+    /* Same solid-blue accent used for selected tree rows / toggle switches. */
+    background: #186cd9;
+    border: 1px solid #186cd9;
+    color: #ffffff;
+}
+
+.confirm-actions .primary-btn:hover {
+    background: #1560c2;
+    border-color: #1560c2;
+}
+
+.confirm-actions .warning-btn {
+    background: rgba(229, 75, 75, 0.12);
+    border: 1px solid rgba(229, 75, 75, 0.3);
+    color: #e54b4b;
+}
+
+.confirm-actions .warning-btn:hover {
+    background: rgba(229, 75, 75, 0.2);
+    border-color: #e54b4b;
+}
+/* ====================================================================
+   Smooth titlebar-left-cluster resizing
+
+   #save-indicator and #editor-stats normally toggle `.hidden` (display:
+   none), which can't be transitioned and makes the adjacent flex:1 search
+   bar jump-resize the instant either one appears/disappears. Overriding
+   `.hidden` here with a width/opacity animation instead — collapsing to 0
+   width rather than removing the box from flow — lets the search bar's
+   flex-basis recalculation happen smoothly, frame by frame, alongside it.
+   ==================================================================== */
+#editor-stats,
+#save-indicator {
+    opacity: 1;
+    flex-shrink: 0;
+    transition:
+        max-width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1),
+        opacity 0.16s ease,
+        margin 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+/* Clipping for the max-width collapse. IMPORTANT: on #editor-stats the clip
+   lives on the INNER .stats-trigger, not the container — .stats-tooltip is an
+   absolutely-positioned dropdown hanging below the container, so
+   overflow: hidden there swallowed it entirely (hover AND click showed
+   nothing). The trigger is an in-flow block that tracks the container's
+   animating width, so clipping it is enough to hide the counter text during
+   the collapse while the tooltip stays free to escape the box. */
+#save-indicator {
+    overflow: hidden;
+    max-width: 14px; /* matches the SVG's own width/height attributes */
+}
+#editor-stats .stats-trigger {
+    overflow: hidden;
+}
+#editor-stats {
+    max-width: 220px; /* generous ceiling for the char/line counters */
+}
+/* Save-indicator draw animation. The JS (showSaveIndicator) drives
+   stroke-dashoffset 63 -> 0 and swaps ring/check opacity; these transitions
+   are what make those style flips animate — without them the ring pops in
+   fully drawn (a plain circle). Circumference = 2πr ≈ 63 at r=10. */
+#save-indicator .save-ring {
+    transition:
+        stroke-dashoffset 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.15s ease;
+}
+#save-indicator .save-check {
+    transition: opacity 0.15s ease;
+}
+#editor-stats.hidden,
+#save-indicator.hidden {
+    display: flex; /* keep in flow so max-width can animate to 0 */
+    max-width: 0 !important;
+    opacity: 0;
+    margin-left: 0;
+    margin-right: 0;
+    pointer-events: none;
+}
+
+/* ====================================================================
+   Titlebar two-segment bar (breadcrumb path <-> search)
+
+   .titlebar-bar owns the flex:1 titlebar space and holds two segments:
+   the breadcrumb path display and the search bar. Exactly one is
+   expanded at a time; the other collapses to a square button — same
+   height, only the width shrinks, icon stays full-size. Switching:
+   - mode-path (default): breadcrumb expanded and DRAGGABLE (this is the
+     window-drag surface the input could never safely be), search is a
+     square icon button that expands search mode on click.
+   - mode-search: the full search UI as before; breadcrumb becomes a
+     square home button that returns to path mode.
+   The container background stays draggable so the gap between segments
+   also moves the window.
+   ==================================================================== */
+.titlebar-bar {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    /* redundant explicit centering (on top of the parent's align-items:
+       center) so the bar is symmetrically inset from .window-controls'
+       top/bottom regardless of any stray baseline/line-height influence
+       from sibling titlebar elements */
+    margin: auto 0;
+    -webkit-app-region: drag;
+}
+/* while search results are open, none of the titlebar's nested drag regions
+   should stay draggable — each contributes its own rectangle to Electron's
+   drag map independently (app-region doesn't inherit), so all three
+   (.window-controls, .titlebar-bar, .titlebar-search-bar) must be
+   neutralized or a stray one keeps swallowing the results scrollbar's
+   pointer events */
+body.titlebar-results-open .titlebar-bar {
+    -webkit-app-region: no-drag;
+}
+
+/* ── breadcrumb path segment ── */
+.titlebar-path-segment {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    box-sizing: border-box;
+    /* left padding is 8px so the home icon's left edge lines up exactly
+       with its centered position in the collapsed 32px square (8px + 16px
+       icon + 8px = 32px) — keeping this consistent across expanded and
+       collapsed states means the icon doesn't jump or look off-center in
+       either. Right padding stays more generous for breadcrumb text. */
+    padding: 0 10px 0 8px;
+    background-color: #fcfcfc;
+    border-radius: 9px;
+    overflow: hidden;
+    white-space: nowrap;
+    user-select: none;
+    /* flex-grow/flex-basis animate unreliably in practice (some engines
+       don't interpolate them smoothly, and having both `flex` and an
+       explicit `width` fight over which wins mid-transition causes visible
+       snapping). Sizing is driven by `width` alone instead — universally
+       and smoothly animatable — with flex-grow/shrink fixed at 0 so flex
+       never overrides it. No border either: a 1px border only cost extra
+       arithmetic to keep in sync across the width/padding changes between
+       modes, and was itself the source of a stray pixel shift — the
+       background color alone is enough to read as a button/pill. */
+    flex: 0 0 auto;
+    transition:
+        width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1),
+        padding 0.22s cubic-bezier(0.25, 0.1, 0.25, 1),
+        background-color 0.15s ease;
+}
+.path-home-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+}
+.titlebar-bar.mode-search .titlebar-path-segment:hover .path-home-icon {
+    opacity: 1;
+}
+.titlebar-path-text {
+    font-size: 0.84rem;
+    color: #6a7178;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.1px;
+}
+
+/* mode-path: breadcrumb expanded (drag surface), search collapsed */
+.titlebar-bar.mode-path .titlebar-path-segment {
+    /* fills whatever space the collapsed 32px search square doesn't need;
+       calc() against the container's own width keeps this a real `width`
+       value (still smoothly animatable) instead of flex-grow */
+    width: calc(
+        100% - 32px - 6px
+    ); /* 32px = collapsed square, 6px = .titlebar-bar's gap */
+    -webkit-app-region: drag;
+}
+.titlebar-bar.mode-path .titlebar-search-bar {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+    cursor: pointer;
+    background-color: #fcfcfc;
+    -webkit-app-region: no-drag;
+}
+.titlebar-bar.mode-path .titlebar-search-bar:hover {
+    background-color: #f0f0f0;
+}
+/* collapsed search: hide all internals, show only the centered icon */
+.titlebar-bar.mode-path
+    .titlebar-search-bar
+    > *:not(.titlebar-search-collapsed-icon) {
+    display: none;
+}
+.titlebar-search-collapsed-icon {
+    display: none;
+    width: 16px;
+    height: 16px;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+}
+.titlebar-bar.mode-path .titlebar-search-collapsed-icon {
+    display: block;
+}
+.titlebar-bar.mode-path
+    .titlebar-search-bar:hover
+    .titlebar-search-collapsed-icon {
+    opacity: 1;
+}
+
+/* mode-search: search expanded (current UI), breadcrumb is a home button */
+.titlebar-bar.mode-search .titlebar-path-segment {
+    width: 32px;
+    /* Left-anchored padding (not justify-content: center) keeps the icon's
+       position continuous through the width transition — centering would
+       recompute against the box's current (shrinking) width every frame,
+       making the icon appear to slide in from the right edge. 8px centers
+       a 16px icon inside this 32px box exactly ((32-16)/2); the expanded
+       state's own left padding is matched to the same 8px below so the
+       icon doesn't jump between modes either. */
+    padding: 0 0 0 8px;
+    cursor: pointer;
+    background-color: #fcfcfc;
+    -webkit-app-region: no-drag;
+}
+.titlebar-bar.mode-search .titlebar-path-segment:hover {
+    background-color: #f0f0f0;
+}
+.titlebar-bar.mode-search .titlebar-path-text {
+    display: none;
+}
+.titlebar-bar.mode-search .titlebar-search-bar {
+    width: calc(
+        100% - 32px - 6px
+    ); /* 32px = collapsed square, 6px = .titlebar-bar's gap */
+}
+
+/* ====================================================================
+   Titlebar search bar (Firefox unified-bar style)
+
+   Always visible, fills the remaining titlebar space between the
+   stats/save-indicator cluster (left) and read-mode/window controls
+   (right) — this is the flex:1 element now that main-tab-bar is gone.
+   The search icon lives INSIDE the bar's left edge (not as a separate
+   titlebar button). Clicking it — or the bar itself — does not expand
+   or push anything below; the scope menu and the all-documents results
+   list both open in-place as absolutely-positioned dropdowns directly
+   under the bar, exactly like Firefox's "Search once with:" panel.
+   ==================================================================== */
+.titlebar-search-bar {
+    position: relative; /* anchors the two absolutely-positioned dropdowns */
+    min-width: 0;
+    flex: 0 0 auto; /* width alone drives sizing, see .titlebar-path-segment */
+    display: flex;
+    align-items: center;
+    height: 32px;
+    box-sizing: border-box;
+    padding: 0 4px 0 4px;
+    gap: 4px;
+    background-color: #fcfcfc;
+    border-radius: 9px;
+    /* transparent border matching the results dropdown's own 1px border
+       width — with box-sizing: border-box this keeps the bar's rendered
+       edges pixel-identical to the dropdown's bordered edges below it, so
+       the two don't misalign by a hairline at the seam when fused */
+    border: 1px solid transparent;
+    /* the bar's own background is draggable so grabbing empty space inside
+       it (left of the input caret, right of the action buttons) moves the
+       window, same as clicking blank titlebar area elsewhere; every
+       interactive child below is individually marked no-drag so clicks
+       still reach them instead of starting a window drag */
+    -webkit-app-region: drag;
+    transition:
+        box-shadow 0.15s ease,
+        background-color 0.15s ease,
+        padding 0.22s cubic-bezier(0.25, 0.1, 0.25, 1),
+        width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.titlebar-search-bar:focus-within {
+    box-shadow: 0 0 0 3px rgba(24, 108, 217, 0.08);
+}
+
+/* When the all-documents results dropdown is open, fuse it visually with
+   the bar above it: flatten the bar's bottom corners (so the shared edge
+   is a straight line, not two separate rounded corners meeting) and drop
+   the bar's own shadow/depth cues on that edge, so the two pieces read as
+   one continuous expanded shape rather than a bar sitting on top of a
+   separate floating panel. Driven by a body class set directly from JS
+   rather than :has(), which didn't reliably take effect in this app's
+   webview — meaning neither this fusion styling nor the drag-region fix
+   below it were actually applying before. */
+body.titlebar-results-open .titlebar-search-bar {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    /* suppress the focus glow while fused — otherwise its ring would draw a
+       line straight across the seam between bar and results */
+    box-shadow: none;
+    /* while the results dropdown is open the user is actively searching, not
+       dragging the window — drop the bar's drag region entirely so it can't
+       geometrically swallow pointer events (e.g. the results scrollbar thumb)
+       in the area it overlaps */
+    -webkit-app-region: no-drag;
+}
+
+/* ── scope selector (search icon + caret, left-aligned inside the bar) ── */
+.titlebar-search-scope {
+    position: relative;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+
+.titlebar-search-scope-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: 26px;
+    padding: 0 5px;
+    border: none;
+    border-radius: 6px;
+    /* distinct tint so the icon reads as its own control, not plain bar
+       chrome — this is the distinct background the search icon gets */
+    background-color: rgba(24, 108, 217, 0.12);
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition: background-color 0.15s ease;
+}
+.titlebar-search-scope-btn:hover {
+    background-color: rgba(24, 108, 217, 0.2);
+}
+.titlebar-search-scope.open .titlebar-search-scope-btn {
+    background-color: rgba(24, 108, 217, 0.2);
+}
+
+.titlebar-search-scope-btn img {
+    width: 14px;
+    height: 14px;
+    display: block;
+}
+.titlebar-search-scope-btn .scope-caret {
+    width: 10px;
+    height: 10px;
+    opacity: 0.55;
+    transition: transform 0.15s ease;
+}
+.titlebar-search-scope.open .scope-caret {
+    transform: rotate(180deg);
+}
+
+.titlebar-search-scope-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 8px;
+    background-color: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+    padding: 6px;
+    width: max-content;
+    min-width: 0;
+    max-width: 260px;
+    box-sizing: border-box;
+    font-size: 0.86rem;
+    z-index: 1010;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px) scale(0.98);
+    transform-origin: top left;
+    -webkit-app-region: no-drag;
+    transition:
+        opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.12s;
+}
+
+.titlebar-search-scope.open .titlebar-search-scope-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+
+.titlebar-scope-menu-label {
+    padding: 6px 10px 8px;
+    font-size: 0.78rem;
+    color: #999999;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    margin-bottom: 4px;
+}
+
+.titlebar-scope-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    color: #222222;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.1s ease;
+}
+.titlebar-scope-option:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.titlebar-scope-option .scope-check {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    opacity: 0;
+}
+.titlebar-scope-option.selected .scope-check {
+    opacity: 1;
+}
+.titlebar-scope-option.selected {
+    color: #186cd9;
+    font-weight: 500;
+}
+
+/* ── text input ── */
+.titlebar-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 4px;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.86rem;
+    font-family: inherit;
+    color: #212529;
+    /* Always no-drag so a click reliably focuses it for typing. Electron
+       drag regions swallow ALL pointer events (documented behavior), so a
+       draggable input can never be focused — window dragging is handled
+       by the breadcrumb path segment instead (see .titlebar-bar above). */
+    -webkit-app-region: no-drag;
+}
+.titlebar-search-input::placeholder {
+    color: #999999;
+}
+
+/* ── live match count ("3 / 12") ── */
+.titlebar-search-count {
+    flex-shrink: 0;
+    font-size: 0.76rem;
+    color: #999999;
+    padding: 0 2px;
+    white-space: nowrap;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+    /* plain text, not interactive — leave draggable so it doubles as drag
+       surface when a match count is showing */
+}
+.titlebar-search-count:empty {
+    display: none;
+}
+
+/* ── prev / next / case-sensitive / close ── */
+.titlebar-search-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    /* container background stays draggable; buttons below opt out */
+}
+
+.titlebar-search-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 7px;
+    background-color: transparent;
+    cursor: pointer;
+    opacity: 0.65;
+    -webkit-app-region: no-drag;
+    transition:
+        background-color 0.15s ease,
+        opacity 0.15s ease;
+}
+.titlebar-search-action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    opacity: 1;
+}
+.titlebar-search-action-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
+    background-color: transparent;
+    pointer-events: none;
+}
+.titlebar-search-action-btn:disabled:hover {
+    background-color: transparent;
+    opacity: 0.25;
+}
+.titlebar-search-action-btn img {
+    width: 80%;
+    height: 80%;
+}
+
+/* prev/next both use the same arrow-down.svg; prev is just next rotated
+   180° so it points up instead of needing a second icon asset */
+.titlebar-search-action-btn.nav-prev img {
+    transform: rotate(180deg);
+}
+
+.titlebar-search-action-btn.active {
+    background-color: rgba(24, 108, 217, 0.16);
+    opacity: 1;
+}
+.titlebar-search-action-btn.active img {
+    filter: invert(36%) sepia(84%) saturate(2258%) hue-rotate(205deg)
+        brightness(94%) contrast(92%); /* tints to #186cd9, matches sidebar.css pin icon */
+}
+
+.titlebar-search-divider {
+    width: 1px;
+    height: 18px;
+    background-color: rgba(0, 0, 0, 0.1);
+    margin: 0 3px;
+    flex-shrink: 0;
+}
+
+/* ── results dropdown (all-documents scope only; current-document scope
+   jumps straight into the editor via CodeMirror and never shows this) ──
+   Opens in-place directly under the bar, same positioning language as the
+   scope menu above — nothing else in the titlebar moves. */
+.titlebar-search-results {
+    position: absolute;
+    top: 100%; /* flush against the bar's border-box bottom, no gap */
+    left: 0;
+    right: 0;
+    margin-top: 0;
+    max-height: min(360px, 60vh);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    /* fuse with the bar above into one continuous shape: identical
+       background, identical outer corner radius, no border or shadow along
+       the shared top edge — only the sides and bottom carry the outline,
+       so the two pieces read as a single expanded box, not a bar sitting
+       on a separate panel */
+    background-color: #fcfcfc;
+    border: 1px solid transparent;
+    border-top: none;
+    border-bottom-left-radius: 9px;
+    border-bottom-right-radius: 9px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+    padding: 4px;
+    z-index: 1009;
+    -webkit-app-region: no-drag;
+}
+.titlebar-search-results.hidden {
+    display: none;
+}
+
+.titlebar-search-result-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+.titlebar-search-result-row:hover,
+.titlebar-search-result-row.active-result {
+    background-color: rgba(24, 108, 217, 0.1);
+}
+
+.titlebar-result-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #888888;
+}
+.titlebar-result-file img {
+    width: 12px;
+    height: 12px;
+    opacity: 0.8;
+}
+.titlebar-result-line-number {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.titlebar-result-snippet {
+    font-size: 0.88rem;
+    color: #333333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.titlebar-search-empty {
+    padding: 16px 8px;
+    font-size: 0.88rem;
+    color: #888888;
+    user-select: none;
+    text-align: center;
+}
+
+/* highlighted matched substring within a result snippet */
+.titlebar-search-highlight {
+    background-color: rgba(24, 108, 217, 0.16);
+    color: #186cd9;
+    border-radius: 3px;
+}
+
+/* ====================================================================
+   Global print stylesheet for PDF export
+   ==================================================================== */
+@media print {
+    /* 1. hide all app chrome except the editor body */
+    .window-controls,
+    .sidebar,
+    .sidebar-resizer,
+    .toast-notification,
+    .context-menu,
+    #save-indicator {
+        display: none;
+    }
+
+    /* 2. reset fixed layouts to normal page flow */
+    html,
+    body,
+    .window,
+    .app-container,
+    .content,
+    .main-tab-content,
+    .file-editor-container {
+        position: static;
+        display: block;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        background: #ffffff;
+        color: #000000;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* 3. disable transitions and transforms */
+    .editor-content-inner {
+        display: block;
+        transform: none;
+        transition: none;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        padding: 0;
+    }
+
+    /* 4. place the title statically at the top of the page */
+    .editor-title {
+        position: static;
+        display: block;
+        width: 100%;
+        padding: 0;
+        margin-top: 10mm;
+        margin-bottom: 8mm;
+        font-size: 26pt;
+        font-weight: bold;
+        color: #000000;
+        background: transparent;
+    }
+
+    /* 5. release CodeMirror scroll guards so text flows across pages */
+    .editor-body,
+    .cm-editor,
+    .cm-scroller,
+    .cm-content {
+        position: static;
+        display: block;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* normalize line wrapping and print spacing */
+    .cm-line {
+        padding: 0;
+        margin: 3px 0;
+        word-break: break-word;
+        white-space: pre-wrap;
+    }
+
+    /* 6. A4 page size and margins */
+    @page {
+        size: A4;
+        margin: 20mm 18mm 20mm 18mm;
+    }
+}

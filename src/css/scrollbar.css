@@ -1,0 +1,72 @@
+/* Custom overlay scrollbars (paired with scrollbar.js) */
+
+/* ── Hide ALL native scrollbars globally ─────────────────────────────────────
+   Electron on Linux can show GTK/webkit scrollbars on any scroll container.
+   Kill them everywhere; our JS draws the overlay thumb instead. */
+* {
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important;
+}
+*::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+    -webkit-appearance: none !important;
+    background: transparent !important;
+}
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-corner {
+    display: none !important;
+    background: transparent !important;
+}
+
+/* The overlay thumb (appended to <body>, positioned via JS). */
+.custom-scrollbar-thumb {
+    position: fixed;
+    right: 0;
+    top: 0;
+    width: 4px;
+    height: 0;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    pointer-events: none; /* enabled only when visible */
+    /* This thumb is appended directly to <body> and positioned via fixed
+       coordinates, so it can end up geometrically overlapping an Electron
+       -webkit-app-region: drag region (e.g. the titlebar search bar) even
+       though it isn't a DOM descendant of it. Electron's drag-region hit
+       testing is purely geometric — it swallows pointer events for
+       anything in that screen rectangle regardless of DOM nesting or
+       z-index — so the thumb needs its own explicit no-drag or it becomes
+       ungrabbable whenever a dropdown places it over a draggable area. */
+    -webkit-app-region: no-drag;
+    transition:
+        opacity 0.25s ease,
+        width 0.12s ease,
+        right 0.12s ease,
+        background-color 0.12s ease;
+    z-index: 99999;
+}
+
+.custom-scrollbar-thumb.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transition:
+        opacity 0s,
+        width 0.12s ease,
+        right 0.12s ease,
+        background-color 0.12s ease;
+}
+
+.custom-scrollbar-thumb:hover,
+.custom-scrollbar-thumb.dragging {
+    background-color: rgba(0, 0, 0, 0.25);
+}
+
+/* Sidebar (file-tree) thumb must sit below the settings overlay (z-index 9999)
+   so it's covered by the modal even if a hide call is ever missed. */
+.custom-scrollbar-thumb--sidebar {
+    z-index: 9998;
+}

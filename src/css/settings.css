@@ -1,0 +1,896 @@
+/* ====================================================================
+   Settings overlay
+   ==================================================================== */
+.settings-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    backdrop-filter: saturate(50%) contrast(80%);
+    -webkit-backdrop-filter: saturate(50%) contrast(80%);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    border-radius: 16px;
+    overflow: visible;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease;
+}
+
+/* dim backdrop as a separate pseudo-element */
+.settings-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 16px;
+    transition: opacity 0.2s ease;
+    z-index: -1;
+}
+
+.settings-overlay.visible {
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ====================================================================
+   Settings modal
+   ==================================================================== */
+.settings-modal {
+    width: 90%;
+    max-width: 90vw;
+    height: 85%;
+    max-height: 80vh;
+    background: #f8f9fa;
+    border-radius: 16px;
+    box-shadow: 0 25px 36px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    overflow: hidden;
+}
+
+/* left menu sidebar */
+.settings-sidebar {
+    width: 15%;
+    min-width: 140px;
+    background: #e9e9e9;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.settings-menu {
+    list-style: none;
+    margin: 0;
+    padding: 12px 8px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.settings-menu li {
+    padding: 16px;
+    margin: 4px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #444;
+    transition:
+        background 0.1s,
+        color 0.1s;
+}
+
+.settings-menu li:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.settings-menu li.active {
+    background: rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+}
+
+/* right main area */
+.settings-main {
+    width: 85%;
+    display: flex;
+    flex-direction: column;
+    background: #f8f9fa;
+    min-width: 0;
+}
+
+/* header */
+.settings-header {
+    height: 56px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+/* close button */
+.settings-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    box-sizing: content-box;
+    border: none;
+    border-radius: 50%;
+}
+.settings-close-btn img {
+    width: 40%;
+    height: 40%;
+    display: block;
+}
+
+/* scrollable body */
+.settings-body {
+    padding-top: 20px;
+    padding-left: 80px;
+    padding-right: 80px;
+    overflow-y: auto;
+    flex: 1;
+    box-sizing: border-box;
+    order: 2;
+}
+
+/* panel visibility */
+.settings-panel {
+    display: none;
+}
+.settings-panel.active {
+    display: block;
+}
+
+/* ====================================================================
+   Setting cards & form elements
+   ==================================================================== */
+.setting-card {
+    background-color: #ededed;
+    border-radius: 16px;
+    padding: 32px 32px;
+    margin-bottom: 32px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 0;
+    width: 100%;
+}
+
+.setting-label {
+    font-size: 1rem;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    width: 130px; /* align the slider track start to a common baseline */
+}
+
+/* About section links */
+.about a {
+    color: #586580;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+.about a:hover {
+    color: #6a7999;
+    text-decoration: underline;
+}
+
+/* ====================================================================
+   Custom dropdown
+   ==================================================================== */
+.custom-dropdown {
+    position: relative;
+    width: 100%;
+    max-width: 300px;
+    font-family: inherit;
+    margin-top: 8px;
+    box-sizing: border-box;
+}
+
+.custom-dropdown *,
+.custom-dropdown *::before,
+.custom-dropdown *::after {
+    box-sizing: border-box;
+}
+
+/* Trigger: lighter than the card background so it reads as a distinct,
+   liftable control rather than blending into the #ededed card behind it.
+   #f8f9fa (the app's base window color, lighter than any card surface) gives
+   real contrast at rest; hover moves to pure white so the difference is
+   unambiguous rather than one gray shade away from another. */
+.dropdown-selected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background-color: #f8f9fa;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #495057;
+    position: relative;
+    z-index: 1;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.dropdown-selected:hover {
+    background-color: #fbfcfd;
+    border-color: rgba(0, 0, 0, 0.14);
+}
+
+/* dropdown arrow icon (assets/arrow-down.svg), same rotate-on-open treatment
+   as .section-arrow-icon. Sits inside .dropdown-selected, vertically
+   centered via flex rather than absolute positioning. */
+.dropdown-arrow-icon {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+    opacity: 0.55;
+    user-select: none;
+    -webkit-user-drag: none;
+    transition:
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.15s ease;
+}
+
+.custom-dropdown.open .dropdown-arrow-icon {
+    transform: rotate(180deg);
+    opacity: 0.85;
+}
+
+/* open state: trigger fuses with the list below it (flat bottom edge, no
+   gap) so the whole thing reads as one control that has expanded, matching
+   how the request wants it attached rather than floating as a separate
+   card. */
+.custom-dropdown.open .dropdown-selected {
+    background-color: #ffffff;
+    border-color: rgba(0, 0, 0, 0.14);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
+}
+
+/* Accordion wrapper: same grid-template-rows 0fr -> 1fr technique as
+   .tree-children, so the list grows open top-to-bottom instead of just
+   fading/popping in. Sits flush under the trigger (no gap), and only the
+   wrapper (not the inner <ul>) carries the outer border/radius/shadow so
+   the seam with the trigger disappears while open. */
+.dropdown-list-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    background-color: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    border-top: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transition:
+        grid-template-rows 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.15s ease;
+}
+
+.custom-dropdown.open .dropdown-list-wrapper {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+/* option list */
+.dropdown-list {
+    min-height: 0;
+    overflow: hidden;
+    padding: 4px;
+    margin: 0;
+    list-style: none;
+    pointer-events: none;
+}
+
+.custom-dropdown.open .dropdown-list {
+    pointer-events: auto;
+}
+
+/* option rows: same shape/hover language as .context-menu-item (5px radius,
+   quiet rgba(0,0,0,0.06) tint) instead of a saturated blue fill with black
+   text, which was the only hover treatment in the entire app that wasn't a
+   soft neutral tint. Sits on a white list background now, so the resting
+   hover tint needs a touch more weight (0.07) to stay legible against white
+   rather than the ~0.06 that read fine on a gray card. */
+.dropdown-item {
+    padding: 8px 10px;
+    color: #495057;
+    font-size: 0.92rem;
+    cursor: pointer;
+    border-radius: 5px;
+    box-sizing: border-box;
+    transition: background-color 0.1s ease;
+}
+
+.dropdown-item:hover {
+    background-color: rgba(0, 0, 0, 0.07);
+    color: #212529;
+}
+
+/* local font option divider: was #dfe3e6 against a #f6f6f6 list, nearly
+   invisible; #e4e4e4 keeps it subtle but visible against the new white
+   list background. */
+.dropdown-item[data-value="font-select"] {
+    border-top: 1px solid #e4e4e4;
+    margin-top: 4px;
+    padding-top: 12px;
+}
+
+/* floating padding bar */
+.padding-slider-float {
+    position: fixed;
+    bottom: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    background: rgba(248, 249, 250, 0.92);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 100px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 99999;
+    visibility: hidden;
+}
+
+.padding-slider-float.active {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+}
+
+#editor-padding-value-float {
+    font-size: 0.88rem;
+    color: #666;
+    width: 32px;
+    text-align: right;
+}
+
+/* ====================================================================
+   Default vertical margins between sliders
+   ==================================================================== */
+#fontsize-slider-row,
+#linespacing-slider-row {
+    margin-top: 32px;
+}
+
+/* ====================================================================
+   Slider-drag transparency overrides (fixed-position)
+   ==================================================================== */
+
+/* 1. make the dim backdrop transparent while dragging */
+.settings-overlay.dragging-slider {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+.settings-overlay.dragging-slider::before {
+    opacity: 0;
+    transition: none;
+}
+
+/* 2. make the modal frame transparent */
+.settings-overlay.dragging-slider .settings-modal,
+.settings-overlay.dragging-slider .settings-main {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* 3. hide menu bar, header, and titles */
+.settings-overlay.dragging-slider .settings-sidebar,
+.settings-overlay.dragging-slider .settings-header,
+.settings-overlay.dragging-slider .settings-bottom,
+.settings-overlay.dragging-slider .settings-body h2 {
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
+}
+
+/* 4. remove card backgrounds and shadows while dragging */
+.settings-overlay.dragging-slider .settings-panel > .setting-card {
+    background: transparent;
+    box-shadow: none;
+    border: none;
+}
+
+/* 5. hide non-active rows but keep their space to preserve layout */
+.settings-overlay.dragging-slider .setting-card .setting-row {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 6. turn the active row into a compact box */
+.settings-overlay.dragging-slider .setting-card .setting-row.active-row {
+    opacity: 1;
+    pointer-events: auto;
+    background: #ededed;
+    border-radius: 16px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18);
+
+    margin-left: -32px;
+    margin-right: -32px;
+    padding: 20px 32px; /* 20px vertical inner padding */
+}
+
+/* Offset the new 20px vertical padding by pulling each slider row up by
+   20px from its original margin, so content does not shift. */
+
+/* Padding row: original margin 0, pull up 20px */
+.settings-overlay.dragging-slider .setting-card #padding-slider-row.active-row {
+    margin-top: -20px;
+}
+
+/* Font Size / Line Spacing rows: 32px - 20px padding = 12px */
+.settings-overlay.dragging-slider .setting-card #fontsize-slider-row.active-row,
+.settings-overlay.dragging-slider
+    .setting-card
+    #linespacing-slider-row.active-row {
+    margin-top: 12px;
+}
+/* ====================================================================
+   Slider design matching & layout fine-tuning
+   ==================================================================== */
+
+/* ====================================================================
+   Custom range sliders
+   ==================================================================== */
+/* Reset native appearance so track/thumb can be fully restyled the same
+   way across Chromium/WebKit and Firefox. */
+#editor-padding-slider,
+#editor-fontsize-slider,
+#editor-linespacing-slider {
+    flex: 1;
+    min-width: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 18px; /* generous hit area; visual track is drawn thinner below */
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Track: flat neutral groove matching .toggle-slider's resting gray, with a
+   filled-blue portion up to the thumb drawn via a linear-gradient hard-stop
+   at --slider-fill (set inline per-input by JS as a percentage), so progress
+   reads at a glance instead of a plain uniform bar. Falls back to an
+   all-neutral track if --slider-fill isn't set. */
+#editor-padding-slider,
+#editor-fontsize-slider,
+#editor-linespacing-slider {
+    --slider-fill: 0%;
+}
+
+#editor-padding-slider::-webkit-slider-runnable-track,
+#editor-fontsize-slider::-webkit-slider-runnable-track,
+#editor-linespacing-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 4px;
+    background: linear-gradient(
+        to right,
+        #186cd9 var(--slider-fill),
+        #ced4da var(--slider-fill)
+    );
+}
+
+#editor-padding-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 4px;
+    background: #ced4da;
+}
+#editor-padding-slider::-moz-range-progress,
+#editor-fontsize-slider::-moz-range-progress,
+#editor-linespacing-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 4px;
+    background: #186cd9;
+}
+#editor-fontsize-slider::-moz-range-track,
+#editor-linespacing-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 4px;
+    background: #ced4da;
+}
+
+/* Thumb: solid blue circle with the same soft elevation as .toggle-slider's
+   knob, growing slightly on hover/active for tactile feedback. */
+#editor-padding-slider::-webkit-slider-thumb,
+#editor-fontsize-slider::-webkit-slider-thumb,
+#editor-linespacing-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px; /* centers 16px thumb on 4px track */
+    border-radius: 50%;
+    background: #186cd9;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition:
+        transform 0.12s ease,
+        box-shadow 0.12s ease;
+}
+
+#editor-padding-slider::-moz-range-thumb,
+#editor-fontsize-slider::-moz-range-thumb,
+#editor-linespacing-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #186cd9;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition:
+        transform 0.12s ease,
+        box-shadow 0.12s ease;
+}
+
+#editor-padding-slider:hover::-webkit-slider-thumb,
+#editor-fontsize-slider:hover::-webkit-slider-thumb,
+#editor-linespacing-slider:hover::-webkit-slider-thumb,
+#editor-padding-slider:hover::-moz-range-thumb,
+#editor-fontsize-slider:hover::-moz-range-thumb,
+#editor-linespacing-slider:hover::-moz-range-thumb {
+    transform: scale(1.1);
+}
+
+#editor-padding-slider:active::-webkit-slider-thumb,
+#editor-fontsize-slider:active::-webkit-slider-thumb,
+#editor-linespacing-slider:active::-webkit-slider-thumb,
+#editor-padding-slider:active::-moz-range-thumb,
+#editor-fontsize-slider:active::-moz-range-thumb,
+#editor-linespacing-slider:active::-moz-range-thumb {
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(24, 108, 217, 0.4);
+}
+
+/* fixed-width right-hand value indicators for alignment */
+#editor-padding-value,
+#editor-fontsize-value,
+#editor-linespacing-value {
+    font-size: 0.88rem;
+    color: #212529;
+    width: 45px; /* fixed width keeps the right edge consistent */
+    text-align: center;
+    font-variant-numeric: tabular-nums; /* tabular numerals prevent horizontal jitter */
+    flex-shrink: 0;
+}
+
+/* ====================================================================
+   Backup toggle switch
+   ==================================================================== */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #ced4da;
+    transition: background-color 0.2s ease;
+    border-radius: 24px;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #ffffff;
+    transition: transform 0.2s ease;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: #186cd9;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+/* ====================================================================
+   Backup expand subpanel interaction styles
+   ==================================================================== */
+.backup-expand-subpanel {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+        max-height 0.2s ease,
+        opacity 0.2s ease,
+        margin-top 0.2s ease;
+    margin-top: 0;
+}
+
+.backup-expand-subpanel.expanded {
+    max-height: 320px;
+    opacity: 1;
+    margin-top: 14px;
+    border-top: 1px solid #f1f3f5;
+    padding-top: 14px;
+}
+
+.path-picker-container {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.path-text-input {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    background: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 0 10px;
+    font-size: 0.88rem;
+    color: #495057;
+    outline: none;
+    font-family: inherit;
+}
+
+.settings-action-btn {
+    height: 32px;
+    padding: 0 14px;
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.settings-action-btn:hover {
+    background: #f8f9fa;
+    border-color: #adb5bd;
+    color: #212529;
+}
+
+/* ====================================================================
+   Cloud backup credential form styles
+   ==================================================================== */
+.cloud-credentials-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.cloud-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cloud-input-row label {
+    width: 90px;
+    font-size: 0.85rem;
+    color: #495057;
+    font-weight: 500;
+}
+
+.cloud-action-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+input[type="password"].path-text-input {
+    font-family: monospace;
+}
+/* ====================================================================
+   Responsive Layout (Narrow Windows)
+   ==================================================================== */
+@media (max-width: 700px) {
+    .settings-body {
+        padding-left: 24px !important;
+        padding-right: 24px !important;
+    }
+
+    .setting-card {
+        padding: 24px !important;
+    }
+
+    .setting-row {
+        flex-wrap: wrap;
+    }
+
+    .setting-label {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    #editor-padding-value,
+    #editor-fontsize-value,
+    #editor-linespacing-value {
+        text-align: right;
+    }
+}
+
+/* ====================================================================
+   Backup snapshots card
+   ====================================================================
+   The generic .setting-label is a fixed 130px (sized for the slider rows in
+   Appearance), which wraps longer labels and jams the rows together. This
+   card uses a two-line label block -- title over a muted description -- with
+   the control pushed to the right edge, and real vertical rhythm between
+   rows. */
+#snapshot-card .snapshot-row {
+    align-items: center;
+}
+#snapshot-card .snapshot-row + .snapshot-row {
+    margin-top: 26px;
+}
+.snapshot-label-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+#snapshot-card .setting-label {
+    width: auto; /* override the 130px slider-alignment width */
+    font-weight: 500;
+}
+.snapshot-desc {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #868e96;
+    line-height: 1.45;
+}
+#snapshot-card .custom-dropdown {
+    margin-top: 0;
+    width: 190px;
+    flex-shrink: 0;
+}
+.snapshot-keep-input {
+    width: 74px;
+    flex: none;
+    text-align: center;
+}
+/* Hide number-input spinners; the value is small and typed, and the default
+   spinners read as visual noise against the flat inputs used elsewhere. */
+.snapshot-keep-input::-webkit-outer-spin-button,
+.snapshot-keep-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ====================================================================
+   Restore tab
+   ==================================================================== */
+#restore-card {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.restore-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+.restore-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 4px;
+}
+.restore-item + .restore-item {
+    border-top: 1px solid #e9ecef;
+}
+.restore-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+.restore-item-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #343a40;
+}
+.restore-item-meta {
+    font-size: 0.78rem;
+    color: #adb5bd;
+}
+.restore-item-btn {
+    flex-shrink: 0;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    color: #495057;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease,
+        border-color 0.12s ease;
+}
+.restore-item-btn:hover {
+    background: #f1f3f5;
+}
+/* Armed = one more click actually restores. Red enough to read as "this one
+   is live", without a modal. */
+.restore-item-btn.armed {
+    background: #e03131;
+    border-color: #e03131;
+    color: #fff;
+}
+.restore-item-btn.armed:hover {
+    background: #c92a2a;
+}
+.restore-item-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+.restore-empty {
+    font-size: 0.9rem;
+    color: #868e96;
+    padding: 8px 4px;
+    list-style: none;
+}
+
+/* A second-level heading inside a panel that already opened with an <h2>
+   (Backup -> Restore). Same element as the panel title so the type scale
+   stays consistent, but with top margin so the sections read as separate
+   rather than as one long card stack. */
+.settings-subhead {
+    margin-top: 8px;
+}

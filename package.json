@@ -1,0 +1,61 @@
+{
+  "name": "elec",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.12.0",
+      "onFail": "download"
+    }
+  },
+  "build": {
+    "appId": "com.yourname.nib",
+    "productName": "Nib",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "bin/**/*",
+      "rust-backend/index.js",
+      "rust-backend/*.node",
+      "!rust-backend/target/**/*",
+      "!rust-backend/src/**/*",
+      "!rust-backend/Cargo.toml",
+      "!**/*.map"
+    ],
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office"
+    }
+  },
+  "devDependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/search": "^6.7.1",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
+    "@lezer/highlight": "^1.2.3",
+    "codemirror": "^6.0.2",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1"
+  },
+  "dependencies": {
+    "@napi-rs/cli": "^3.7.2"
+  }
+}

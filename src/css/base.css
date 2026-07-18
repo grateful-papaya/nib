@@ -1,0 +1,58 @@
+@font-face {
+    font-family: "Pretendard";
+    src: url("../assets/fonts/PretendardVariable.ttf");
+    /* A weight RANGE, not `normal`. This file is PretendardVariable — a
+       variable font carrying a continuous wght axis from 45 to 920. Declaring
+       `font-weight: normal` told the browser this face covers exactly 400, so
+       every `font-weight: bold` in the app fell back to SYNTHETIC bold:
+       Chromium smears the 400 outline sideways. That's why bold looked thin
+       and slightly mushy rather than actually heavy — the real 700/800 masters
+       in the file were never reachable. With the range declared, font-weight
+       becomes a live axis and any value in 45–920 renders as a true master. */
+    font-weight: 45 920;
+    font-style: normal;
+    /* Show fallback text immediately and swap when the face loads, instead of
+       a blank flash on cold start. */
+    font-display: swap;
+}
+
+html,
+body {
+    font-family: "Pretendard", sans-serif;
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: transparent;
+    /* clip, not hidden: an overflow:hidden box is still a scroll container
+       that scrollIntoView()/focus() can silently scroll (shifting the whole
+       app with no way to scroll it back). overflow:clip clips identically
+       but is NOT scrollable at all — scrollTop is pinned to 0. */
+    overflow: clip;
+    color: #212529;
+}
+
+body {
+    transition: filter 0.2s ease;
+}
+
+/* Unfocused-window desaturation. NOT on <body>: a body-wide filter
+   unavoidably covers the window buttons, and counter-saturating the hovered
+   close button can't restore its color — saturate() composes exactly in
+   linear algebra, but the intermediate boost clips at the channel gamut for
+   saturated reds, so 166.7% → 0.6 lands on a washed-out color, not the
+   original. Instead the filter is scoped to (a) the app content and (b)
+   window buttons ONLY while not hovered: the hovered button has NO filter
+   anywhere in its ancestor chain, so it renders its exact original color
+   whether the window is focused or not. Titlebar chrome outside the buttons
+   is gray, which saturate() doesn't visibly change anyway. */
+.app-container,
+.window-btn {
+    transition: filter 0.2s ease;
+}
+body.app-blurred .app-container,
+body.app-blurred .window-btn:not(:hover) {
+    filter: saturate(0.6);
+}
+.window-btn:hover {
+    transition: none; /* snap to true color instantly on hover */
+}
