@@ -901,13 +901,15 @@ input[type="password"].path-text-input {
     font-family: inherit;
     font-size: 0.85rem;
     font-weight: 500;
-    color: #868e96;
     cursor: pointer;
     white-space: nowrap;
     transform: scale(0.92);
+    border-radius: 6px;
     transition:
         color 0.25s ease,
-        transform 0.25s cubic-bezier(0.3, 0.9, 0.4, 1);
+        transform 0.25s cubic-bezier(0.3, 0.9, 0.4, 1),
+        background-color 0.25s ease,
+        font-weight 0.25s ease;
 }
 
 .segmented-control .segment-option.active {
@@ -917,8 +919,13 @@ input[type="password"].path-text-input {
     cursor: default;
 }
 
+.segmented-control .segment-option.active:hover {
+    background-color: transparent;
+}
+
 .segmented-control .segment-option:not(.active):hover {
-    color: #495057;
+    font-weight: 600;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 .snapshot-keep-input {
     width: 74px;
@@ -937,8 +944,7 @@ input[type="password"].path-text-input {
 }
 
 .snapshot-keep-input:focus {
-    border-color: #186cd9;
-    box-shadow: 0 0 0 3px rgba(24, 108, 217, 0.12);
+    border-color: #adb5bd;
 }
 /* Hide number-input spinners; the value is small and typed, and the default
    spinners read as visual noise against the flat inputs used elsewhere. */
