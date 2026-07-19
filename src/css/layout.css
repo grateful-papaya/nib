@@ -842,6 +842,12 @@ body.titlebar-results-open .titlebar-bar {
     overflow: hidden;
     text-overflow: ellipsis;
     letter-spacing: -0.1px;
+    /* Grow so the info button is pinned to the segment's right end instead of
+       sitting right after the text. min-width:0 is what keeps
+       text-overflow:ellipsis working once this is a flex item — without it the
+       flex base size is the content width and the box refuses to shrink. */
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 /* mode-path: breadcrumb expanded (drag surface), search collapsed */
@@ -1462,4 +1468,280 @@ body.titlebar-results-open .titlebar-search-bar {
         size: A4;
         margin: 20mm 18mm 20mm 18mm;
     }
+}
+
+/* ====================================================================
+   Breadcrumb info button + metadata popover
+   Append to layout.css.
+   ==================================================================== */
+
+/* The segment is the window-drag surface in mode-path, so the button has to
+   opt out explicitly — -webkit-app-region doesn't inherit, and Electron needs
+   a real nested no-drag rectangle (the same trick .titlebar-search-bar
+   already relies on). */
+/* Selector specificity, not source order, decides ties between two class-ish
+   selectors of otherwise equal weight — button[type="button"] above (0,1,1)
+   and a bare .titlebar-path-info-btn (0,1,0) are NOT actually equal, the
+   attribute selector is slightly heavier, so that shared rule's square
+   corners and #d0d0d0 hover were winning regardless of where either block
+   sits in the file. Repeating the class (.titlebar-path-info-btn twice,
+   (0,2,0)) outweighs it cleanly without reaching for !important. */
+.titlebar-path-info-btn.titlebar-path-info-btn {
+    flex-shrink: 0;
+    display: none; /* only meaningful while the breadcrumb is expanded */
+    align-items: center;
+    justify-content: center;
+    /* 28px hit target/hover circle around a 20px icon — 4px of clearance on
+       every side, so the circle reads as a hover AFFORDANCE around the glyph
+       rather than an outline hugging it. (24px earlier put only 2px between
+       icon edge and circle edge, which almost disappeared at this scale.)
+       The home icon on the left stays 16px on purpose — that one is passive
+       decoration, this one is the only thing in the breadcrumb you can click,
+       so it should read heavier than its neighbour rather than match. */
+    width: 28px;
+    height: 28px;
+    margin-right: -7px; /* pull toward the segment's 10px right padding */
+    padding: 0;
+    border: none;
+    background: transparent;
+    /* Circular, unlike the square hover fill every other titlebar button
+       uses (scope button, search actions, window controls) — a deliberate
+       one-off so this button doesn't blend into that family: it's the only
+       thing in the breadcrumb you can click. */
+    border-radius: 50%;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+    transition:
+        background-color 0.12s ease,
+        opacity 0.12s ease;
+}
+.titlebar-bar.mode-path .titlebar-path-info-btn {
+    display: flex;
+}
+/* Nothing open, nothing to describe. Needs to outrank the mode-path rule
+   above, which is (0,3,0) — hence carrying .titlebar-bar.mode-path along
+   rather than the shorter `body.no-file-open .titlebar-path-info-btn`, which
+   at (0,2,1) would silently lose. */
+body.no-file-open .titlebar-bar.mode-path .titlebar-path-info-btn {
+    display: none;
+}
+.titlebar-path-info-btn img {
+    /* info.svg is a FILL icon whose artwork runs edge to edge in its 24x24
+       viewBox — no built-in padding, unlike most of the titlebar glyphs. So
+       the rendered size is the ink size: 20px here is genuinely 20px of mark,
+       and it fills the 24px button with 2px of breathing room on each side.
+       Weight can't be tuned here the way a stroked icon's could (there's no
+       stroke-width to raise, and an <img> can't be recolored from CSS), which
+       leaves opacity as the only "make it heavier" lever — hence 0.75 rather
+       than the 0.45-0.6 used for the passive glyphs around it. */
+    width: 20px;
+    height: 20px;
+    opacity: 0.75;
+    transition: opacity 0.12s ease;
+}
+.titlebar-path-info-btn.titlebar-path-info-btn:hover {
+    background-color: rgba(0, 0, 0, 0.07);
+    /* button[type="button"]:hover also sets opacity:1 on the BUTTON itself
+       (harmless here, there's no visible text) but its #d0d0d0 background
+       would otherwise square off the circle again on hover specifically —
+       repeat-class this rule too, not just the base one. */
+}
+.titlebar-path-info-btn:hover img,
+.titlebar-path-info-btn.open img {
+    opacity: 1;
+}
+.titlebar-path-info-btn.titlebar-path-info-btn.open {
+    background-color: rgba(0, 0, 0, 0.09);
+}
+
+/* Anchored to .titlebar-bar, NOT to .titlebar-path-segment: the segment is
+   overflow:hidden (it has to be, so the breadcrumb can clip during the width
+   transition) and would clip this away entirely. right:38px lines the
+   popover's right edge up with the segment's right edge in mode-path
+   (32px collapsed search square + 6px gap). */
+.titlebar-bar {
+    position: relative;
+}
+.titlebar-path-info-popover {
+    position: absolute;
+    top: 100%;
+    right: 38px;
+    margin-top: 8px;
+    width: 300px;
+    box-sizing: border-box;
+    padding: 12px;
+    background-color: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+    font-size: 0.84rem;
+    z-index: 1010;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px) scale(0.98);
+    transform-origin: top right;
+    -webkit-app-region: no-drag;
+    transition:
+        opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.12s;
+}
+.titlebar-path-info-popover.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+/* Same neutralization body.titlebar-results-open performs: every nested drag
+   rectangle in the titlebar contributes to Electron's drag map
+   independently, and a stray one keeps swallowing the popover's clicks. */
+body.titlebar-info-open .titlebar-bar,
+body.titlebar-info-open .titlebar-path-segment {
+    -webkit-app-region: no-drag;
+}
+
+.path-info-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #212529;
+    word-break: break-all;
+}
+.path-info-fullpath {
+    margin-top: 3px;
+    font-size: 0.75rem;
+    color: #9aa0a6;
+    word-break: break-all;
+    line-height: 1.4;
+}
+.path-info-rows {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.path-info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    color: #6a7178;
+}
+.path-info-row > span:last-child {
+    color: #212529;
+    text-align: right;
+    word-break: break-all;
+}
+.path-info-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: flex-end;
+}
+.path-info-tag {
+    padding: 1px 7px;
+    border-radius: 100px;
+    background-color: rgba(24, 108, 217, 0.1);
+    color: #186cd9;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+.path-info-tag:hover {
+    background-color: rgba(24, 108, 217, 0.2);
+}
+
+.path-info-actions {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.path-info-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.84rem;
+    color: #212529;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+.path-info-action:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+.path-info-action img {
+    width: 13px;
+    height: 13px;
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+
+/* ====================================================================
+   Tag autocomplete dropdown
+
+   Created in JS and appended to .titlebar-search-bar, which is already
+   position:relative for the scope menu and results list. Sits at z-index
+   1011 — one above both of those, because it can legitimately overlap the
+   results list while the user edits a query that already returned hits.
+   ==================================================================== */
+.titlebar-tag-suggest {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 8px;
+    min-width: 200px;
+    max-width: 320px;
+    padding: 6px;
+    box-sizing: border-box;
+    background-color: #ffffff;
+    border: 1px solid #dcdcdc;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+    font-size: 0.86rem;
+    z-index: 1011;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px) scale(0.98);
+    transform-origin: top left;
+    -webkit-app-region: no-drag;
+    transition:
+        opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.12s;
+}
+.titlebar-tag-suggest.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+.titlebar-tag-suggest-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: #212529;
+    cursor: pointer;
+    user-select: none;
+}
+.titlebar-tag-suggest-row.active,
+.titlebar-tag-suggest-row:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+.titlebar-tag-suggest-name {
+    color: #186cd9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.titlebar-tag-suggest-count {
+    flex-shrink: 0;
+    font-size: 0.76rem;
+    color: #9aa0a6;
 }

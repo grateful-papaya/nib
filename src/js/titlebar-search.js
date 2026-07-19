@@ -4,6 +4,13 @@ import { getEditorView, getCurrentOpenFile } from "./state/editorState.js";
 import { revealInSidebar } from "./file-tree.js";
 import { showToast } from "./utils.js";
 import { attachScrollbar } from "./scrollbar.js";
+import {
+  parseTagQuery,
+  initTagAutocomplete,
+  tagAutocompleteKeydown,
+  closeTagAutocomplete,
+} from "./tag-search.js";
+import { closePathInfo } from "./path-info.js";
 
 // ─── Titlebar Search Manager ───────────────────────────────────────────────
 //
@@ -90,6 +97,11 @@ const TitlebarSearchManager = (() => {
     barContainer.classList.toggle("mode-path", mode === "path");
     barContainer.classList.toggle("mode-search", mode === "search");
 
+    // The info popover is anchored to (and only reachable from) the expanded
+    // breadcrumb, so collapsing it to a 32px square has to take the popover
+    // with it — otherwise it floats over the search bar with no visible owner.
+    if (mode === "search") closePathInfo();
+
     if (mode === "path") {
       // Leaving search: close any open dropdowns so they don't float over
       // the collapsed square button.
@@ -115,6 +127,13 @@ const TitlebarSearchManager = (() => {
     const signature = `${vaultPath}|${openFile}`;
     if (signature === lastPathSignature) return;
     lastPathSignature = signature;
+
+    // Single source of truth for "nothing is open", published as a body class
+    // so CSS can react. This poll's 500ms granularity is fine for chrome that
+    // only needs to look right; anything needing exact timing (the context
+    // menu suppressor in app.js) reads getCurrentOpenFile() directly instead.
+    document.body.classList.toggle("no-file-open", !openFile);
+    if (!openFile) closePathInfo();
 
     if (!vaultPath) {
       pathText.textContent = "SomeApp";
@@ -406,12 +425,25 @@ const TitlebarSearchManager = (() => {
     if (!vaultPath) return;
 
     const requestId = ++latestRequestId;
+    // A `tag:` / `#` token routes to the tag index instead of the full-text
+    // walk. Order matters on the Rust side: the tag filter is a set operation
+    // over data already in memory, while the text pass is file I/O — narrowing
+    // by tag first is the whole reason this is fast on a large vault.
+    const { include, exclude, text, isTagQuery } = parseTagQuery(query);
     try {
-      const raw = await api.searchContentInVault({ vaultPath, query });
+      const raw = isTagQuery
+        ? await api.searchByTags({ vaultPath, include, exclude, text })
+        : await api.searchContentInVault({ vaultPath, query });
       if (requestId !== latestRequestId) return;
 
+      // Case-sensitivity applies to the free-text half only. `query` still
+      // carries the `tag:` tokens, so filtering rows against it would drop
+      // every single hit.
+      const literal = isTagQuery ? text : query;
       allResults = (raw || [])
-        .filter((m) => (caseSensitive ? m.lineText.includes(query) : true))
+        .filter((m) =>
+          caseSensitive && literal ? m.lineText.includes(literal) : true,
+        )
         .map((m) => ({
           path: m.path,
           name: m.name,
@@ -543,7 +575,11 @@ const TitlebarSearchManager = (() => {
 
   // ── shared: run whichever scope is active ──
   const runSearch = (query) => {
-    if (getScope() === "all") {
+    // A tag query is inherently vault-wide: filtering the one open document by
+    // its own tags answers a question nobody asks. Route it down the all-docs
+    // path regardless of the sticky scope — without mutating the scope, so
+    // deleting the tag token restores the user's real preference.
+    if (getScope() === "all" || parseTagQuery(query).isTagQuery) {
       closeReplaceRow();
       runAllSearch(query);
     } else {
@@ -702,6 +738,24 @@ const TitlebarSearchManager = (() => {
     // fresh across open/rename/delete/restore paths alike.
     setInterval(updatePathDisplay, 500);
 
+    // Tag autocomplete on the same input — no separate mode, no separate
+    // widget to focus.
+    initTagAutocomplete(input);
+
+    // Tag chips (breadcrumb info popover today, a tag panel later) hand over a
+    // ready-made query through a window event rather than reaching into this
+    // module's internals. Keeps the dependency one-directional.
+    window.addEventListener("nib:search-query", (e) => {
+      const q = String(e.detail || "").trim();
+      if (!q) return;
+      setMode("search", { focus: true });
+      input.value = q;
+      input.setSelectionRange(q.length, q.length);
+      closeTagAutocomplete();
+      clearTimeout(debounceTimer);
+      runSearch(q);
+    });
+
     // Collapsed search square (mode-path) → expand into search mode.
     els().bar?.addEventListener("click", () => {
       if (els().barContainer?.classList.contains("mode-path")) {
@@ -767,6 +821,13 @@ const TitlebarSearchManager = (() => {
     });
 
     input.addEventListener("keydown", (e) => {
+      // The tag autocomplete owns arrows/Enter/Tab/Escape while its list is
+      // open. It has to get first refusal: otherwise Enter runs the search on
+      // a half-typed tag and ArrowDown walks the results list underneath.
+      if (tagAutocompleteKeydown(e)) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         if (els().scopeWrapper?.classList.contains("open")) {

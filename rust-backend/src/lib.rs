@@ -6,11 +6,12 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use trash::delete as send_to_trash;
 
@@ -856,21 +857,30 @@ pub fn read_file_content(file_path: String) -> Result<String> {
 
 #[napi]
 pub fn write_file_content(vault_path: String, file_path: String, content: String) -> Result<()> {
+  let _ = vault_path; // kept in the signature; the JS call sites all pass it
   let path = Path::new(&file_path);
-  let mut backup_dir = PathBuf::from(&vault_path);
-  backup_dir.push(".backup");
-  if !backup_dir.exists() {
-    fs::create_dir_all(&backup_dir).map_err(|x| err(x.to_string()))?;
+
+  // Written IN PLACE, deliberately. The previous implementation staged the
+  // content in .backup/<basename> and fs::rename'd it over the target, which
+  // looks like the textbook atomic-save -- but rename REPLACES THE INODE, and
+  // a file's birth time belongs to the inode. Every autosave therefore minted
+  // a brand new creation date, which is why "Created" in the info popover was
+  // always identical to "Modified": it was reporting the last save, not the
+  // day the note was written. Linux offers no syscall to set a btime back
+  // afterwards (utimensat covers atime/mtime only), so preserving it means
+  // never swapping the inode in the first place.
+  //
+  // The cost is the atomicity the rename was there for: a crash midway through
+  // this write leaves a truncated file. That's the right trade for a notes app
+  // whose durability story is the 7z snapshot archive, and the old code wasn't
+  // reliably atomic anyway -- staging by basename alone meant two files named
+  // the same in different folders raced over one staging path.
+  if let Some(parent) = path.parent() {
+    if !parent.exists() {
+      fs::create_dir_all(parent).map_err(|x| err(x.to_string()))?;
+    }
   }
-  let file_name = path
-    .file_name()
-    .ok_or_else(|| err("Invalid file name".into()))?;
-  let temp_backup_path = backup_dir.join(file_name);
-  fs::write(&temp_backup_path, content).map_err(|x| err(x.to_string()))?;
-  if fs::rename(&temp_backup_path, path).is_err() {
-    fs::copy(&temp_backup_path, path).map_err(|x| err(x.to_string()))?;
-    let _ = fs::remove_file(&temp_backup_path);
-  }
+  fs::write(path, content).map_err(|x| err(x.to_string()))?;
   Ok(())
 }
 
@@ -1316,6 +1326,21 @@ pub fn get_file_meta(file_path: String) -> Result<FileMeta> {
     .ok()
     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
     .map(|d| d.as_secs() as i64);
+
+  // `created()` is the real inode birth time (statx on Linux, so ext4/btrfs
+  // report it; some filesystems and older kernels return Err, in which case
+  // this stays None and the UI shows "Unknown" rather than a made-up value).
+  // Notes saved before write_file_content stopped rename-swapping the inode
+  // carry a birth time equal to their last save -- nothing can recover the
+  // original, but from here on it stays put.
+  let created = match (created, modified) {
+    // A birth time later than the last modification means the filesystem
+    // isn't tracking it meaningfully. Report nothing instead of a date that
+    // would read as nonsense next to Modified.
+    (Some(c), Some(m)) if c > m + 2 => None,
+    (c, _) => c,
+  };
+
   Ok(FileMeta {
     size,
     created,
@@ -1371,5 +1396,523 @@ pub fn start_vault_watcher(vault_path: String, callback: ThreadsafeFunction<(), 
     }
   });
 
+  Ok(())
+}
+
+// ── Tag index ───────────────────────────────────────────────────────────────
+//
+// Tags live INSIDE the markdown (YAML frontmatter `tags:` and inline `#tag`),
+// never in a sidecar file: they're user-authored content, so putting them
+// beside the document means they vanish the moment the note is opened in any
+// other editor, and every move/copy/merge desynchronises the pair. Sidecars
+// stay reserved for things that genuinely aren't content (cursor position,
+// fold state).
+//
+// The index itself is a plain file -> tags map held in memory and mirrored to
+// `<vault>/.conf/tag-index.json`. Deliberately NOT a tag -> files map: keeping
+// a reverse map in sync on every edit is where this kind of code usually rots,
+// and inverting a few thousand entries on demand is microseconds. The mtime
+// stored per file makes refresh incremental — a cold start reparses only what
+// changed since the last run, and a save reparses exactly one file.
+//
+// No `regex` dependency is pulled in for the parsing; the two formats are
+// simple enough to scan by hand, and hand-scanning is what makes it possible
+// to skip fenced code blocks correctly (a regex can't track that state).
+
+const TAG_CACHE_VERSION: u32 = 1;
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct TagFileEntry {
+  mtime: i64,
+  /// Lowercased, used for all matching.
+  tags: Vec<String>,
+  /// First-seen casing of each tag in `tags`, parallel by index. Matching is
+  /// case-insensitive but the tag list UI should show `#Physics`, not
+  /// `#physics`, if that's how the user actually writes it.
+  display: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct TagCache {
+  version: u32,
+  files: HashMap<String, TagFileEntry>,
+}
+
+/// vault path -> cache. Keyed by vault so switching vaults mid-session
+/// doesn't serve stale results from the previous one.
+static TAG_CACHES: OnceLock<Mutex<HashMap<String, TagCache>>> = OnceLock::new();
+
+fn tag_caches() -> &'static Mutex<HashMap<String, TagCache>> {
+  TAG_CACHES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn tag_cache_path(vault_path: &str) -> PathBuf {
+  let mut p = PathBuf::from(vault_path);
+  p.push(".conf");
+  if !p.exists() {
+    let _ = fs::create_dir_all(&p);
+  }
+  p.push("tag-index.json");
+  p
+}
+
+/// Tag characters: letters, digits, `_`, `-`, `/`. The slash is what makes
+/// `project/nib` a hierarchical tag rather than two tags.
+fn is_tag_char(c: char) -> bool {
+  c.is_alphanumeric() || c == '_' || c == '-' || c == '/'
+}
+
+/// A tag must START with a letter or underscore. That one rule removes the
+/// biggest source of false positives — `#1`, `#42`, `#123456` (issue refs,
+/// numbered anything, six-digit hex colours). Letter-led hex like `#fff` still
+/// slips through the rule itself, but inline code and fenced blocks are
+/// stripped before the scan runs, which is where CSS actually lives.
+fn is_tag_start(c: char) -> bool {
+  c.is_alphabetic() || c == '_'
+}
+
+fn push_tag(out: &mut Vec<String>, disp: &mut Vec<String>, raw: &str) {
+  let cleaned = raw.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+  let cleaned = cleaned.strip_prefix('#').unwrap_or(cleaned);
+  if cleaned.is_empty() || cleaned.len() > 128 {
+    return;
+  }
+  if !cleaned.chars().next().map(is_tag_start).unwrap_or(false) {
+    return;
+  }
+  if !cleaned.chars().all(is_tag_char) {
+    return;
+  }
+  let lower = cleaned.to_lowercase();
+  if !out.contains(&lower) {
+    out.push(lower);
+    disp.push(cleaned.to_string());
+  }
+}
+
+/// YAML frontmatter tags. Handles both the flow form
+///     tags: [physics, homework]
+/// and the block form
+///     tags:
+///       - physics
+///       - homework
+/// `tag:` and `keywords:` are accepted as aliases since notes imported from
+/// other tools use them interchangeably. Returns the byte offset just past
+/// the closing `---` so the inline scan can skip the frontmatter entirely.
+fn parse_frontmatter_tags(content: &str, out: &mut Vec<String>, disp: &mut Vec<String>) -> usize {
+  let trimmed_start = content.trim_start_matches('\u{feff}');
+  let bom_offset = content.len() - trimmed_start.len();
+  if !(trimmed_start.starts_with("---\n") || trimmed_start.starts_with("---\r\n")) {
+    return 0;
+  }
+
+  let mut offset = bom_offset;
+  let mut lines = content[bom_offset..].split_inclusive('\n');
+  // consume the opening ---
+  if let Some(first) = lines.next() {
+    offset += first.len();
+  }
+
+  let mut in_block_list = false;
+  for line in lines {
+    let line_len = line.len();
+    let text = line.trim_end_matches(|c| c == '\n' || c == '\r');
+    let trimmed = text.trim();
+
+    if trimmed == "---" || trimmed == "..." {
+      return offset + line_len;
+    }
+    offset += line_len;
+
+    if in_block_list {
+      if let Some(item) = trimmed.strip_prefix('-') {
+        push_tag(out, disp, item);
+        continue;
+      }
+      in_block_list = false;
+    }
+
+    // Only top-level keys (no leading indentation) count, so a nested
+    // `tags:` under some other key isn't picked up by accident.
+    if text.starts_with(char::is_whitespace) {
+      continue;
+    }
+    let (key, value) = match trimmed.split_once(':') {
+      Some(kv) => kv,
+      None => continue,
+    };
+    let key_lower = key.trim().to_lowercase();
+    if key_lower != "tags" && key_lower != "tag" && key_lower != "keywords" {
+      continue;
+    }
+
+    let value = value.trim();
+    if value.is_empty() {
+      in_block_list = true;
+    } else if let Some(inner) = value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
+      for item in inner.split(',') {
+        push_tag(out, disp, item);
+      }
+    } else {
+      // `tags: physics homework` or `tags: physics`
+      for item in value.split(|c| c == ',' || c == ' ') {
+        push_tag(out, disp, item);
+      }
+    }
+  }
+  content.len()
+}
+
+/// Inline `#tag` scan over the body. Fenced code blocks and inline code spans
+/// are skipped — without that, every `#include` in a C snippet and every
+/// `#!/bin/sh` shebang becomes a tag. A `#` immediately preceded by a word
+/// character, `#`, `/` or `&` is also rejected, which covers URL fragments
+/// (`example.com/page#frag`), ATX heading levels (`## Section`) and HTML
+/// entities (`&#39;`).
+fn parse_inline_tags(body: &str, out: &mut Vec<String>, disp: &mut Vec<String>) {
+  let mut in_fence = false;
+  let mut fence_marker = '`';
+
+  for line in body.lines() {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+      let marker = trimmed.chars().next().unwrap();
+      if !in_fence {
+        in_fence = true;
+        fence_marker = marker;
+      } else if marker == fence_marker {
+        in_fence = false;
+      }
+      continue;
+    }
+    if in_fence {
+      continue;
+    }
+
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut in_code_span = false;
+    while i < chars.len() {
+      let c = chars[i];
+      if c == '`' {
+        in_code_span = !in_code_span;
+        i += 1;
+        continue;
+      }
+      if in_code_span || c != '#' {
+        i += 1;
+        continue;
+      }
+
+      let prev_ok = if i == 0 {
+        true
+      } else {
+        let p = chars[i - 1];
+        !(p.is_alphanumeric() || p == '_' || p == '#' || p == '/' || p == '&')
+      };
+      if !prev_ok {
+        i += 1;
+        continue;
+      }
+
+      let mut j = i + 1;
+      while j < chars.len() && is_tag_char(chars[j]) {
+        j += 1;
+      }
+      if j > i + 1 {
+        let raw: String = chars[i + 1..j].iter().collect();
+        // A trailing `/` or `-` is punctuation, not part of the tag.
+        let raw = raw.trim_end_matches(|c| c == '/' || c == '-');
+        push_tag(out, disp, raw);
+      }
+      i = j.max(i + 1);
+    }
+  }
+}
+
+fn extract_tags(content: &str) -> (Vec<String>, Vec<String>) {
+  let mut tags = Vec::new();
+  let mut disp = Vec::new();
+  let body_start = parse_frontmatter_tags(content, &mut tags, &mut disp);
+  parse_inline_tags(
+    &content[body_start.min(content.len())..],
+    &mut tags,
+    &mut disp,
+  );
+  (tags, disp)
+}
+
+/// Read a vault file as text, matching search_content_in_vault's UTF-8 ->
+/// EUC-KR fallback so a legacy-encoded note indexes the same way it searches.
+fn read_text_file(path: &str) -> Option<String> {
+  let bytes = fs::read(path).ok()?;
+  match String::from_utf8(bytes) {
+    Ok(s) => Some(s),
+    Err(e) => {
+      let bytes = e.into_bytes();
+      let (decoded, _, malformed) = encoding_rs::EUC_KR.decode(&bytes);
+      if malformed {
+        None
+      } else {
+        Some(decoded.into_owned())
+      }
+    }
+  }
+}
+
+fn file_mtime(path: &str) -> i64 {
+  fs::metadata(path)
+    .and_then(|m| m.modified())
+    .ok()
+    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+    .map(|d| d.as_secs() as i64)
+    .unwrap_or(0)
+}
+
+/// Bring the in-memory cache for `vault_path` up to date and hand back the
+/// current file list. Cheap when nothing changed: one directory walk plus one
+/// stat per file, no reads and no disk write.
+fn refresh_tag_cache(vault_path: &str) -> std::result::Result<Vec<(String, String)>, String> {
+  let root = Path::new(vault_path);
+  if !root.exists() {
+    return Err("Vault path does not exist".into());
+  }
+  let nodes = read_dir_recursive(root)?;
+  let mut files = Vec::new();
+  collect_text_files(&nodes, &mut files);
+
+  let mut caches = tag_caches().lock().map_err(|e| e.to_string())?;
+  let cache = caches.entry(vault_path.to_string()).or_insert_with(|| {
+    let disk = fs::read_to_string(tag_cache_path(vault_path))
+      .ok()
+      .and_then(|s| serde_json::from_str::<TagCache>(&s).ok())
+      .filter(|c| c.version == TAG_CACHE_VERSION);
+    disk.unwrap_or(TagCache {
+      version: TAG_CACHE_VERSION,
+      files: HashMap::new(),
+    })
+  });
+
+  let mut dirty = false;
+  // Owned rather than borrowed from `files`: HashSet has drop glue, so a
+  // HashSet<&str> would keep `files` borrowed all the way to the end of the
+  // scope and block the `Ok(files)` move at the bottom. Cloning a few thousand
+  // path strings once per query is not worth being clever about.
+  let mut seen: HashSet<String> = HashSet::with_capacity(files.len());
+
+  for (path, _name) in &files {
+    seen.insert(path.clone());
+    let mtime = file_mtime(path);
+    if let Some(entry) = cache.files.get(path) {
+      if entry.mtime == mtime {
+        continue;
+      }
+    }
+    let (tags, display) = match read_text_file(path) {
+      Some(content) => extract_tags(&content),
+      None => (Vec::new(), Vec::new()),
+    };
+    cache.files.insert(
+      path.clone(),
+      TagFileEntry {
+        mtime,
+        tags,
+        display,
+      },
+    );
+    dirty = true;
+  }
+
+  let before = cache.files.len();
+  cache.files.retain(|p, _| seen.contains(p.as_str()));
+  if cache.files.len() != before {
+    dirty = true;
+  }
+
+  if dirty {
+    if let Ok(json) = serde_json::to_string(&*cache) {
+      let _ = fs::write(tag_cache_path(vault_path), json);
+    }
+  }
+
+  Ok(files)
+}
+
+/// Hierarchical match: querying `project` also matches `project/nib`, but not
+/// `projection`. Exact match always wins first for the common case.
+fn tag_matches(candidate: &str, query: &str) -> bool {
+  candidate == query
+    || (candidate.len() > query.len()
+      && candidate.starts_with(query)
+      && candidate.as_bytes()[query.len()] == b'/')
+}
+
+#[napi(object)]
+pub struct TagCount {
+  pub tag: String,
+  pub count: i32,
+}
+
+/// Every tag in the vault with the number of files carrying it, most-used
+/// first then alphabetical. Powers the autocomplete dropdown and any tag
+/// browser UI.
+#[napi]
+pub fn list_vault_tags(vault_path: String) -> Result<Vec<TagCount>> {
+  refresh_tag_cache(&vault_path).map_err(err)?;
+  let caches = tag_caches().lock().map_err(|e| err(e.to_string()))?;
+  let cache = match caches.get(&vault_path) {
+    Some(c) => c,
+    None => return Ok(Vec::new()),
+  };
+
+  let mut counts: HashMap<&str, i32> = HashMap::new();
+  let mut display: HashMap<&str, &str> = HashMap::new();
+  for entry in cache.files.values() {
+    for (i, tag) in entry.tags.iter().enumerate() {
+      *counts.entry(tag.as_str()).or_insert(0) += 1;
+      if let Some(d) = entry.display.get(i) {
+        display.entry(tag.as_str()).or_insert(d.as_str());
+      }
+    }
+  }
+
+  let mut out: Vec<TagCount> = counts
+    .into_iter()
+    .map(|(tag, count)| TagCount {
+      tag: display.get(tag).copied().unwrap_or(tag).to_string(),
+      count,
+    })
+    .collect();
+  out.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.tag.cmp(&b.tag)));
+  Ok(out)
+}
+
+/// Tag-filtered search. `include` tags are ANDed, `exclude` tags are removed,
+/// and `text` (optional) is then full-text searched WITHIN the surviving
+/// files only. Order matters: the tag filter is a set operation over data
+/// already in memory, while the text pass is file I/O — narrowing first is
+/// what makes `tag:physics 라그랑지안` fast on a large vault.
+///
+/// With no `text`, each surviving file yields one row whose `lineText` is a
+/// preview (its first heading, or first body line), so the existing results
+/// dropdown renders tag hits without any special-casing.
+#[napi]
+pub fn search_by_tags(
+  vault_path: String,
+  include: Vec<String>,
+  exclude: Vec<String>,
+  text: Option<String>,
+) -> Result<Vec<ContentSearchMatch>> {
+  let files = refresh_tag_cache(&vault_path).map_err(err)?;
+
+  let include: Vec<String> = include.iter().map(|t| t.to_lowercase()).collect();
+  let exclude: Vec<String> = exclude.iter().map(|t| t.to_lowercase()).collect();
+  if include.is_empty() && exclude.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let caches = tag_caches().lock().map_err(|e| err(e.to_string()))?;
+  let cache = match caches.get(&vault_path) {
+    Some(c) => c,
+    None => return Ok(Vec::new()),
+  };
+
+  let mut candidates: Vec<(String, String)> = Vec::new();
+  for (path, name) in files {
+    let entry = match cache.files.get(&path) {
+      Some(e) => e,
+      None => continue,
+    };
+    let has = |q: &String| entry.tags.iter().any(|t| tag_matches(t, q));
+    if !include.iter().all(&has) {
+      continue;
+    }
+    if exclude.iter().any(&has) {
+      continue;
+    }
+    candidates.push((path, name));
+  }
+  drop(caches);
+
+  let query_owned = text.unwrap_or_default();
+  let query = query_owned.trim();
+  let query_lower = query.to_lowercase();
+  let mut results = Vec::new();
+
+  for (path, name) in candidates {
+    if query.is_empty() {
+      let content = read_text_file(&path).unwrap_or_default();
+      let mut preview = String::new();
+      let mut line_number = 1i32;
+      let mut in_fm = false;
+      for (idx, line) in content.lines().enumerate() {
+        let t = line.trim();
+        if idx == 0 && t == "---" {
+          in_fm = true;
+          continue;
+        }
+        if in_fm {
+          if t == "---" || t == "..." {
+            in_fm = false;
+          }
+          continue;
+        }
+        if t.is_empty() {
+          continue;
+        }
+        preview = t.trim_start_matches('#').trim().to_string();
+        line_number = (idx + 1) as i32;
+        break;
+      }
+      if preview.chars().count() > 160 {
+        preview = preview.chars().take(160).collect::<String>() + "…";
+      }
+      results.push(ContentSearchMatch {
+        path,
+        name,
+        line_number,
+        line_text: preview,
+        match_start: 0,
+        match_len: 0,
+      });
+      continue;
+    }
+
+    let content = match read_text_file(&path) {
+      Some(c) => c,
+      None => continue,
+    };
+    for (idx, line) in content.lines().enumerate() {
+      if let Some(byte_pos) = line.to_lowercase().find(&query_lower) {
+        results.push(ContentSearchMatch {
+          path: path.clone(),
+          name: name.clone(),
+          line_number: (idx + 1) as i32,
+          line_text: line.to_string(),
+          match_start: line[..byte_pos].encode_utf16().count() as i32,
+          match_len: query.encode_utf16().count() as i32,
+        });
+      }
+    }
+  }
+
+  results.sort_by(|a, b| {
+    a.path
+      .cmp(&b.path)
+      .then_with(|| a.line_number.cmp(&b.line_number))
+  });
+  Ok(results)
+}
+
+/// Force the next query to reparse everything. Call after a restore from
+/// backup, where mtimes can go BACKWARDS — an incremental refresh keyed on
+/// "mtime differs" handles that correctly, but a restore also rewrites many
+/// files at once and a clean rebuild is cheaper than trusting the diff.
+#[napi]
+pub fn invalidate_tag_index(vault_path: String) -> Result<()> {
+  if let Ok(mut caches) = tag_caches().lock() {
+    caches.remove(&vault_path);
+  }
+  let _ = fs::remove_file(tag_cache_path(&vault_path));
   Ok(())
 }

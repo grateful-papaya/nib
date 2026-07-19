@@ -123,6 +123,18 @@
                             class="titlebar-path-text"
                             id="titlebar-path-text"
                         ></span>
+                        <!-- Info button. Only rendered (CSS) while the
+                             breadcrumb is expanded; it must opt out of the
+                             drag region explicitly since -webkit-app-region
+                             doesn't inherit. -->
+                        <button
+                            type="button"
+                            class="titlebar-path-info-btn"
+                            id="titlebar-path-info-btn"
+                            title="File info"
+                        >
+                            <img src="assets/info.svg" alt="" />
+                        </button>
                     </div>
 
                     <div class="titlebar-search-bar" id="titlebar-search-bar">
@@ -285,6 +297,44 @@
                                 title="Replace all matches (Ctrl+Enter)"
                             >
                                 All
+                            </button>
+                        </div>
+                    </div>
+                    <!-- ====================================================
+                         Breadcrumb metadata popover.
+
+                         Sibling of the two segments, NOT a child of
+                         .titlebar-path-segment: that segment is
+                         overflow:hidden (it has to be, so the breadcrumb can
+                         clip during the width transition) and would clip this
+                         away entirely. Positioned against .titlebar-bar.
+                         ==================================================== -->
+                    <div
+                        class="titlebar-path-info-popover"
+                        id="titlebar-path-info-popover"
+                    >
+                        <div class="path-info-name" id="path-info-name"></div>
+                        <div
+                            class="path-info-fullpath"
+                            id="path-info-fullpath"
+                        ></div>
+                        <div class="path-info-rows" id="path-info-rows"></div>
+                        <div class="path-info-actions">
+                            <button
+                                type="button"
+                                class="path-info-action"
+                                id="path-info-copy-abs"
+                            >
+                                <img src="assets/copy.svg" alt="" />
+                                <span>Copy full path</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="path-info-action"
+                                id="path-info-copy-rel"
+                            >
+                                <img src="assets/copy.svg" alt="" />
+                                <span>Copy vault-relative path</span>
                             </button>
                         </div>
                     </div>

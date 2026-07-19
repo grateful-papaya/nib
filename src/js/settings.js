@@ -58,40 +58,60 @@ export function initSettingsPanel() {
  * (custom fonts) are covered automatically. Returns a hide() used when the
  * dropdown closes without the pointer leaving the list.
  */
-function attachSlidingHover(listEl) {
+function attachSlidingHover(listEl, dropdownSelected) {
   const pill = document.createElement("li");
   pill.className = "dropdown-hover-pill";
   pill.setAttribute("aria-hidden", "true");
   listEl.prepend(pill);
 
-  let inside = false;
-
-  const hide = () => {
-    inside = false;
-    pill.classList.remove("visible");
+  // Move the pill onto an item. `instant` suppresses the top/height
+  // transition for one frame, used when the list first opens so the pill is
+  // already sitting on the selected row instead of flying in from y=0.
+  const moveTo = (item, instant) => {
+    if (instant) pill.classList.add("no-motion");
+    pill.style.top = `${item.offsetTop}px`;
+    pill.style.height = `${item.offsetHeight}px`;
+    if (instant) {
+      void pill.offsetHeight; // flush before re-enabling the transition
+      pill.classList.remove("no-motion");
+    }
+    pill.classList.add("visible");
   };
+
+  const currentItem = () => {
+    const value = dropdownSelected.getAttribute("data-value");
+    return listEl.querySelector(`.dropdown-item[data-value="${value}"]`);
+  };
+
+  // Mark the active option so it stays highlighted (bold text) even while
+  // the pill is off hovering another row.
+  const markSelected = () => {
+    const active = currentItem();
+    listEl.querySelectorAll(".dropdown-item").forEach((el) => {
+      el.classList.toggle("selected", el === active);
+    });
+    return active;
+  };
+
+  // Park the pill on the selected option. This is the resting state, so the
+  // hover highlight always grows out of (and returns to) the current choice
+  // rather than appearing from nowhere.
+  const settle = (instant) => {
+    const active = markSelected();
+    if (active) moveTo(active, instant);
+    else pill.classList.remove("visible");
+  };
+
+  const hide = () => pill.classList.remove("visible");
 
   listEl.addEventListener("mouseover", (e) => {
     const item = e.target.closest(".dropdown-item");
-    if (!item || !listEl.contains(item)) return;
-
-    if (!inside) {
-      pill.classList.add("no-motion");
-      pill.style.top = `${item.offsetTop}px`;
-      pill.style.height = `${item.offsetHeight}px`;
-      // Flush so the jump lands before the transition is re-enabled.
-      void pill.offsetHeight;
-      pill.classList.remove("no-motion");
-      inside = true;
-    } else {
-      pill.style.top = `${item.offsetTop}px`;
-      pill.style.height = `${item.offsetHeight}px`;
-    }
-    pill.classList.add("visible");
+    if (item && listEl.contains(item)) moveTo(item, false);
   });
 
-  listEl.addEventListener("mouseleave", hide);
-  return hide;
+  listEl.addEventListener("mouseleave", () => settle(false));
+
+  return { settle, hide, mark: markSelected };
 }
 
 /**
@@ -101,16 +121,19 @@ export function initFontDropdown(dropdownList, dropdownSelected) {
   const dropdown = document.getElementById("font-dropdown");
   if (!dropdown || !dropdownSelected || !dropdownList) return;
 
-  const hideHoverPill = attachSlidingHover(dropdownList);
+  const hoverPill = attachSlidingHover(dropdownList, dropdownSelected);
 
   dropdownSelected.addEventListener("click", (e) => {
     e.stopPropagation();
     dropdown.classList.toggle("open");
-    if (!dropdown.classList.contains("open")) hideHoverPill();
+    // Opening: place the pill on the current choice with no animation.
+    // Closing: drop it, so the next open starts clean.
+    if (dropdown.classList.contains("open")) hoverPill.settle(true);
+    else hoverPill.hide();
   });
   document.addEventListener("click", () => {
     dropdown.classList.remove("open");
-    hideHoverPill();
+    hoverPill.hide();
   });
 
   dropdownList.addEventListener("click", async (e) => {
@@ -119,10 +142,11 @@ export function initFontDropdown(dropdownList, dropdownSelected) {
 
     const value = item.getAttribute("data-value");
     dropdown.classList.remove("open");
-    hideHoverPill();
+    hoverPill.hide();
 
     if (value === "font-select") {
       await handleCustomFontSelect(dropdownSelected, dropdownList);
+      hoverPill.mark();
       return;
     }
 
@@ -130,6 +154,10 @@ export function initFontDropdown(dropdownList, dropdownSelected) {
     applyFontFamily(value);
     setSetting("font_family", value);
     saveAllSettings();
+    // Re-mark so the new choice is bold the next time the list opens. mark()
+    // rather than settle() -- the list is closed here, so the pill should
+    // stay hidden until the next open.
+    hoverPill.mark();
   });
 }
 

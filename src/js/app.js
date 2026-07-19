@@ -22,6 +22,8 @@ import { initSidebarViews } from "./toc.js";
 import { initSettingsPanel, initFontDropdown } from "./settings.js";
 import { initSidebarResizer } from "./resize.js";
 import { initRawSourceTooltip } from "./raw-tooltip.js";
+import { initPathInfo } from "./path-info.js";
+import { invalidateTagList } from "./tag-search.js";
 import {
   initCustomScrollbars,
   hideAllScrollbarsInstantly,
@@ -1259,6 +1261,36 @@ async function initApp(dropdownList, dropdownSelected) {
 // ─── DOMContentLoaded Trigger ─────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", async () => {
   window.focus();
+
+  // Right-clicking the welcome screen (no document open) opened the editor
+  // context menu with every ITEM hidden but its three .context-menu-divider
+  // elements still rendered — the container's padding, border and those rules
+  // are the thin horizontal sliver. Suppressing the menu outright is the fix
+  // rather than also hiding the dividers: a menu with nothing actionable in it
+  // shouldn't appear at all.
+  //
+  // Registered first, in the CAPTURE phase: capture runs before the event
+  // descends, so stopPropagation here beats any bubble-phase handler on the
+  // menu's own wiring no matter which module registers it or when. The check
+  // reads getCurrentOpenFile() at click time, so there's no staleness window
+  // the way a polled body class would have.
+  //
+  // Scoped away from the sidebar deliberately — its context menu is how you
+  // create the first file, so it MUST keep working while nothing is open.
+  document.addEventListener(
+    "contextmenu",
+    (e) => {
+      if (getCurrentOpenFile()) return;
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest("#sidebar, .context-menu")) return;
+      // Native input menus (cut/copy/paste) stay useful even with no document.
+      if (t.closest("input, textarea, [contenteditable='true']")) return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    true,
+  );
   const dropdown = document.getElementById("font-dropdown");
   const dropdownSelected = document.getElementById("dropdown-selected-val");
   const dropdownList = dropdown?.querySelector(".dropdown-list") ?? null;
@@ -1275,6 +1307,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   initSidebarAddButtons();
   initTreeHover();
   initTitlebarSearch();
+  // After initTitlebarSearch: the info popover hands tag queries to the search
+  // bar via a window event, and the bar has to be listening before a click can
+  // reach it.
+  initPathInfo();
   await initSettingsPanel();
   initFontDropdown(dropdownList, dropdownSelected);
   initSidebarResizer();
@@ -1285,5 +1321,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   EventBinder.bindAllEvents();
 
   // Vault-change watcher (moved here from electron-api.js so that file is a leaf).
-  window.api.onVaultChange(() => refreshFileTree());
+  window.api.onVaultChange(() => {
+    refreshFileTree();
+    // External edits (git pull, another editor, a sync client) can add or
+    // remove tags. Dropping the cached tag list makes the next autocomplete
+    // re-fetch; the Rust index behind it is incremental, so this only reparses
+    // the files whose mtime actually moved.
+    invalidateTagList();
+  });
 });

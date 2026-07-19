@@ -74,9 +74,24 @@ export declare function getFileMeta(filePath: string): FileMeta
 
 export declare function getFileTree(vaultPath: string): Array<FileNode>
 
+/**
+ * Force the next query to reparse everything. Call after a restore from
+ * backup, where mtimes can go BACKWARDS — an incremental refresh keyed on
+ * "mtime differs" handles that correctly, but a restore also rewrites many
+ * files at once and a clean rebuild is cheaper than trusting the diff.
+ */
+export declare function invalidateTagIndex(vaultPath: string): void
+
 export declare function jsLog(msg: string): void
 
 export declare function listBackupSnapshots(vaultPath: string): Array<SnapshotInfo>
+
+/**
+ * Every tag in the vault with the number of files carrying it, most-used
+ * first then alphabetical. Powers the autocomplete dropdown and any tag
+ * browser UI.
+ */
+export declare function listVaultTags(vaultPath: string): Array<TagCount>
 
 export declare function loadSettings(vaultPath: string): AppSettings
 
@@ -95,6 +110,19 @@ export declare function restoreSnapshot(vaultPath: string, snapshotPath: string)
 export declare function saveFontByPath(sourcePath: string, fileName: string): string
 
 export declare function saveSettings(vaultPath: string, settings: AppSettings): void
+
+/**
+ * Tag-filtered search. `include` tags are ANDed, `exclude` tags are removed,
+ * and `text` (optional) is then full-text searched WITHIN the surviving
+ * files only. Order matters: the tag filter is a set operation over data
+ * already in memory, while the text pass is file I/O — narrowing first is
+ * what makes `tag:physics 라그랑지안` fast on a large vault.
+ *
+ * With no `text`, each surviving file yields one row whose `lineText` is a
+ * preview (its first heading, or first body line), so the existing results
+ * dropdown renders tag hits without any special-casing.
+ */
+export declare function searchByTags(vaultPath: string, include: Array<string>, exclude: Array<string>, text?: string | undefined | null): Array<ContentSearchMatch>
 
 /**
  * Case-insensitive full-text search across every text document in the
@@ -140,6 +168,11 @@ export interface SnapshotInfo {
 }
 
 export declare function startVaultWatcher(vaultPath: string, callback: ((err: Error | null, ) => void)): void
+
+export interface TagCount {
+  tag: string
+  count: number
+}
 
 /**
  * Check that a previously saved vault path is still usable. Recreates any

@@ -126,6 +126,27 @@ const api = {
   searchContentInVault: ({ vaultPath, query }) =>
     backend.searchContentInVault(vaultPath, query),
 
+  // ── Tag index ────────────────────────────────────────────────────────────
+  // Tags are parsed out of the markdown itself (YAML frontmatter `tags:` and
+  // inline `#tag`), never a sidecar: they're user-authored content, so a
+  // sidecar would lose them the moment a note is opened in another editor and
+  // would desync on every move/copy/merge.
+  //
+  // searchByTags returns ContentSearchMatch, the same shape (and already
+  // camelCase via napi) as searchContentInVault, so the results dropdown
+  // renders tag hits with no special-casing. `text` is optional: with it, the
+  // free-text half is searched only WITHIN the tag-filtered files.
+  searchByTags: ({ vaultPath, include, exclude, text }) =>
+    backend.searchByTags(vaultPath, include || [], exclude || [], text || null),
+
+  // [{ tag, count }] most-used first — powers the autocomplete dropdown.
+  listVaultTags: ({ vaultPath }) => backend.listVaultTags(vaultPath),
+
+  // Force a full reparse. The index is otherwise incremental (keyed on each
+  // file's mtime), which is exactly why a backup restore needs this: a restore
+  // rewrites many files at once AND can move mtimes backwards.
+  invalidateTagIndex: ({ vaultPath }) => backend.invalidateTagIndex(vaultPath),
+
   readFileContent: ({ filePath }) => backend.readFileContent(filePath),
 
   writeFileContent: ({ vaultPath, filePath, content }) =>
