@@ -16,6 +16,82 @@
     font-display: swap;
 }
 
+/* ====================================================================
+   Design tokens — single source of truth for the whole app.
+   Lives in base.css so every later stylesheet can consume it.
+   ==================================================================== */
+:root {
+    /* ── neutrals ── */
+    --st-gray-0: #f8f9fa; /* app base surface */
+    --st-gray-1: #f1f3f5;
+    --st-gray-2: #e9ecef;
+    --st-gray-3: #dee2e6;
+    --st-gray-4: #ced4da;
+    --st-gray-5: #adb5bd;
+    --st-gray-6: #868e96;
+    --st-gray-7: #495057;
+    --st-gray-8: #343a40;
+    --st-gray-9: #212529;
+    --st-white: #ffffff;
+
+    /* ── surfaces ── */
+    --st-surface: var(--st-gray-0); /* modal / main / dropdown trigger */
+    --st-card-bg: #ededed; /* setting cards, dialog secondary buttons */
+    --st-sidebar-bg: #e9e9e9; /* left menu sidebar */
+    /* Titlebar pill surface: the breadcrumb/search segments and the panels
+       fused to their bottom edge (results list, replace row). Intentionally
+       lighter than --st-gray-0 so a pill reads as raised against the #f0f0f0
+       titlebar behind it. */
+    --st-bar-bg: #fcfcfc;
+    /* Floating dropdown panels: scope menu, breadcrumb info popover, tag
+       autocomplete. Border is a hair darker than --st-gray-3 (#dee2e6) on
+       purpose — these panels sit over arbitrary content, not over a gray
+       surface, so they need a slightly harder edge to separate cleanly. */
+    --st-panel-bg: var(--st-white);
+    --st-panel-border: #dcdcdc;
+    --st-panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+
+    /* ── text ── */
+    --st-text: var(--st-gray-9);
+    --st-text-muted: #6c757d;
+    /* Lighter than --st-text-muted, for text that must recede completely:
+       input placeholders, dropdown section labels, tag counts. */
+    --st-text-faint: #999999;
+
+    /* ── accent & semantic ── */
+    --st-accent: #186cd9; /* sliders, toggles, focus, selection */
+    --st-accent-hover: #1560c2;
+    --st-accent-rgb: 24, 108, 217; /* for rgba(var(--st-accent-rgb), a) tints */
+    --st-danger: #e03131; /* armed restore button */
+    --st-danger-hover: #c92a2a;
+    /* Softer red carried over from the confirm dialog's warning button
+       (layout.css used #e54b4b there, not the #e03131 above). To collapse
+       to ONE red app-wide: delete these two, add `--st-danger-rgb: 224,
+       49, 49;`, and point dialogs.css's four --st-danger-soft* references
+       at --st-danger / --st-danger-rgb. That is a small but real color
+       shift, so it is left as an explicit choice rather than folded in
+       silently. */
+    --st-danger-soft: #e54b4b;
+    --st-danger-soft-rgb: 229, 75, 75;
+    --st-link: #586580;
+    --st-link-hover: #6a7999;
+
+    /* ── shared metrics ── */
+    --st-radius: 8px;
+    --st-radius-lg: 16px;
+
+    /* ── easing curves ── */
+    --st-ease-spring: cubic-bezier(0.25, 1, 0.5, 1); /* content slide / press */
+    --st-ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1); /* width collapses */
+    --st-ease-standard: cubic-bezier(0.4, 0, 0.2, 1); /* dropdowns, draws */
+
+    /* Shared open/close animation for every floating dropdown panel. */
+    --st-dropdown-transition:
+        opacity 0.12s var(--st-ease-standard),
+        transform 0.12s var(--st-ease-standard),
+        visibility 0.12s;
+}
+
 html,
 body {
     font-family: "Pretendard", sans-serif;

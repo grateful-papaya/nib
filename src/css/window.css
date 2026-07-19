@@ -1,0 +1,195 @@
+/* ====================================================================
+   window.css — window frame, titlebar chrome, global button base,
+   welcome screen.
+
+   Design tokens (--st-*) live in base.css and must load before this.
+
+   Load order: base.css → window.css → editor.css → titlebar.css →
+   dialogs.css → print.css. (print.css must come last: several of its
+   rules tie with screen rules on specificity and win only by source
+   order.)
+   ==================================================================== */
+
+/* --------------------------------------------------------------------
+   Top-level window frame
+   -------------------------------------------------------------------- */
+.window {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: rgb(248, 248, 248);
+    border-radius: 16px;
+    /* clip, not hidden: still clips the custom frame corners (clip respects
+       border-radius exactly like hidden), but the box is no longer a scroll
+       container — so scrollIntoView()/focus() from descendants (sidebar tree
+       rows, editor content) can never scroll the app chrome. With hidden,
+       #apply-toast's bottom:-10px gave this box 10px of scrollable overflow
+       that revealInSidebar's old scrollIntoView actually consumed, shifting
+       everything inside the window up with no way back. */
+    overflow: clip;
+    box-sizing: border-box;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.06);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* Drop the rounded corners when the window is maximized or tiled
+   (split-screen). Toggled from JS via the bounds poller. */
+.window.squared {
+    border-radius: 0 !important;
+}
+.window.squared .window-controls {
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+}
+
+/* --------------------------------------------------------------------
+   Title bar
+   -------------------------------------------------------------------- */
+.window-controls {
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 12px;
+    gap: 8px;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    box-sizing: border-box;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(0, 0, 0, 0.05) 0%,
+            rgba(0, 0, 0, 0) 40%,
+            transparent 100%
+        ),
+        #f0f0f0;
+    z-index: 1005;
+    -webkit-app-region: drag;
+}
+
+/* interactive titlebar children opt out of the drag region individually */
+.window-btn,
+.editor-stats,
+#save-indicator {
+    -webkit-app-region: no-drag;
+}
+
+/* --------------------------------------------------------------------
+   Shared title-bar button base
+   Specificity note: button[type="button"] is (0,1,1) — heavier than any
+   single-class selector (0,1,0). Component rules that need to override
+   this base (e.g. .titlebar-path-info-btn, .titlebar-replace-action)
+   do it by repeating a class or parent-prefixing, NOT by source order.
+   -------------------------------------------------------------------- */
+button[type="button"] {
+    cursor: pointer;
+    transition:
+        background-color 0.2s ease,
+        opacity 0.2s ease;
+    background: transparent;
+    opacity: 0.6;
+}
+button[type="button"]:hover {
+    background-color: #d0d0d0;
+    opacity: 1;
+}
+
+/* title-bar button layout (more specific than button[type="button"]) */
+.window-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 50%;
+    padding: 0;
+    flex-shrink: 0; /* keep button shape when the window shrinks */
+}
+.window-btn img {
+    width: 40%;
+    height: 40%;
+}
+
+/* quit button hover emphasis */
+#quit-btn:hover {
+    background-color: #e86060;
+}
+
+/* --------------------------------------------------------------------
+   Generic utility
+   -------------------------------------------------------------------- */
+.hidden {
+    display: none;
+}
+
+/* --------------------------------------------------------------------
+   Welcome screen
+   -------------------------------------------------------------------- */
+.welcome-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    /* blend with the default window background */
+    background: transparent;
+}
+
+/* box wrapping the action buttons */
+.welcome-action-box {
+    display: flex;
+    gap: 24px;
+}
+
+/* button toned to match the title bar and sidebar */
+.welcome-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 160px;
+    height: 160px;
+    background-color: var(--st-white);
+    border: 1px solid #e4e6eb; /* soft border matching surrounding UI */
+    border-radius: 16px;
+    color: #4a4a4a; /* dark gray for text readability */
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    transition:
+        background-color 0.2s var(--st-ease-spring),
+        transform 0.2s var(--st-ease-spring),
+        box-shadow 0.2s var(--st-ease-spring);
+    gap: 12px;
+}
+.welcome-btn:hover {
+    background-color: #f5f6f7;
+    border-color: #d1d4db;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+.welcome-btn:active {
+    transform: translateY(-1px);
+    background-color: #eceef1;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+}
+
+.welcome-btn-icon {
+    width: 36px;
+    height: 36px;
+    opacity: 0.65;
+    transition: opacity 0.1s ease;
+}
+.welcome-btn:hover .welcome-btn-icon {
+    opacity: 0.9;
+}
+
+.welcome-btn span {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+}

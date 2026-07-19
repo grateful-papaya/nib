@@ -1,5 +1,65 @@
 /* ====================================================================
-   Settings overlay
+   settings.css — Settings overlay, modal, and all settings controls
+   ====================================================================
+   Contents:
+     1.  Design tokens
+     2.  Overlay & backdrop
+     3.  Modal shell (sidebar, menu, main, header, body, panels)
+     4.  Setting cards & rows
+     5.  Custom dropdown
+     6.  Custom range sliders (+ floating padding bar)
+     7.  Slider-drag transparency mode
+     8.  Toggle rows & switch
+     9.  Backup subpanel, path picker, action buttons
+     10. Cloud backup credential form
+     11. Backup snapshots card & segmented control
+     12. Restore tab
+     13. Responsive layout (narrow windows)
+   ==================================================================== */
+
+/* ====================================================================
+   1. Design tokens
+   ====================================================================
+   Gray scale follows Open Color (gray-0 ... gray-9), which is what the
+   file was already using almost everywhere. Prefixed --st- to avoid
+   collisions with the rest of the app. */
+:root {
+    /* neutrals */
+    --st-gray-0: #f8f9fa; /* app base surface */
+    --st-gray-1: #f1f3f5;
+    --st-gray-2: #e9ecef;
+    --st-gray-3: #dee2e6;
+    --st-gray-4: #ced4da;
+    --st-gray-5: #adb5bd;
+    --st-gray-6: #868e96;
+    --st-gray-7: #495057;
+    --st-gray-8: #343a40;
+    --st-gray-9: #212529;
+    --st-white: #ffffff;
+
+    /* surfaces */
+    --st-surface: var(--st-gray-0); /* modal / main / dropdown trigger */
+    --st-card-bg: #ededed; /* setting cards */
+    --st-sidebar-bg: #e9e9e9; /* left menu sidebar */
+
+    /* text */
+    --st-text: var(--st-gray-9);
+    --st-text-muted: #6c757d;
+
+    /* accent & semantic */
+    --st-accent: #186cd9; /* sliders, toggles, focus */
+    --st-danger: #e03131; /* armed restore button */
+    --st-danger-hover: #c92a2a;
+    --st-link: #586580;
+    --st-link-hover: #6a7999;
+
+    /* shared metrics */
+    --st-radius: 8px;
+    --st-radius-lg: 16px;
+}
+
+/* ====================================================================
+   2. Overlay & backdrop
    ==================================================================== */
 .settings-overlay {
     position: absolute;
@@ -14,7 +74,7 @@
     align-items: center;
     justify-content: center;
     z-index: 9999;
-    border-radius: 16px;
+    border-radius: var(--st-radius-lg);
     overflow: visible;
     opacity: 0;
     pointer-events: none;
@@ -27,7 +87,7 @@
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
-    border-radius: 16px;
+    border-radius: var(--st-radius-lg);
     transition: opacity 0.2s ease;
     z-index: -1;
 }
@@ -39,15 +99,15 @@
 }
 
 /* ====================================================================
-   Settings modal
+   3. Modal shell
    ==================================================================== */
 .settings-modal {
     width: 90%;
     max-width: 90vw;
     height: 85%;
     max-height: 80vh;
-    background: #f8f9fa;
-    border-radius: 16px;
+    background: var(--st-surface);
+    border-radius: var(--st-radius-lg);
     box-shadow: 0 25px 36px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(0, 0, 0, 0.1);
     display: flex;
@@ -58,7 +118,7 @@
 .settings-sidebar {
     width: 15%;
     min-width: 140px;
-    background: #e9e9e9;
+    background: var(--st-sidebar-bg);
     display: flex;
     flex-direction: column;
     padding: 0;
@@ -79,7 +139,7 @@
     border-radius: 12px;
     cursor: pointer;
     font-size: 1rem;
-    color: #444;
+    color: var(--st-gray-7);
     transition:
         background 0.1s,
         color 0.1s;
@@ -99,7 +159,7 @@
     width: 85%;
     display: flex;
     flex-direction: column;
-    background: #f8f9fa;
+    background: var(--st-surface);
     min-width: 0;
 }
 
@@ -126,6 +186,7 @@
     border: none;
     border-radius: 50%;
 }
+
 .settings-close-btn img {
     width: 40%;
     height: 40%;
@@ -134,9 +195,7 @@
 
 /* scrollable body */
 .settings-body {
-    padding-top: 20px;
-    padding-left: 80px;
-    padding-right: 80px;
+    padding: 20px 80px 0;
     overflow-y: auto;
     flex: 1;
     box-sizing: border-box;
@@ -147,17 +206,26 @@
 .settings-panel {
     display: none;
 }
+
 .settings-panel.active {
     display: block;
 }
 
+/* A second-level heading inside a panel that already opened with an <h2>
+   (Backup -> Restore). Same element as the panel title so the type scale
+   stays consistent, but with top margin so the sections read as separate
+   rather than as one long card stack. */
+.settings-subhead {
+    margin-top: 8px;
+}
+
 /* ====================================================================
-   Setting cards & form elements
+   4. Setting cards & rows
    ==================================================================== */
 .setting-card {
-    background-color: #ededed;
-    border-radius: 16px;
-    padding: 32px 32px;
+    background-color: var(--st-card-bg);
+    border-radius: var(--st-radius-lg);
+    padding: 32px;
     margin-bottom: 32px;
     width: 100%;
     box-sizing: border-box;
@@ -181,17 +249,18 @@
 
 /* About section links */
 .about a {
-    color: #586580;
+    color: var(--st-link);
     text-decoration: none;
     transition: color 0.2s;
 }
+
 .about a:hover {
-    color: #6a7999;
+    color: var(--st-link-hover);
     text-decoration: underline;
 }
 
 /* ====================================================================
-   Custom dropdown
+   5. Custom dropdown
    ==================================================================== */
 .custom-dropdown {
     position: relative;
@@ -209,22 +278,22 @@
 }
 
 /* Trigger: lighter than the card background so it reads as a distinct,
-   liftable control rather than blending into the #ededed card behind it.
-   #f8f9fa (the app's base window color, lighter than any card surface) gives
-   real contrast at rest; hover moves to pure white so the difference is
-   unambiguous rather than one gray shade away from another. */
+   liftable control rather than blending into the card behind it. The app's
+   base surface color (lighter than any card surface) gives real contrast at
+   rest; hover moves toward pure white so the difference is unambiguous
+   rather than one gray shade away from another. */
 .dropdown-selected {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     padding: 10px 14px;
-    background-color: #f8f9fa;
+    background-color: var(--st-surface);
     border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 8px;
+    border-radius: var(--st-radius);
     cursor: pointer;
     font-size: 1rem;
-    color: #495057;
+    color: var(--st-gray-7);
     position: relative;
     z-index: 1;
     transition:
@@ -258,11 +327,10 @@
 }
 
 /* open state: trigger fuses with the list below it (flat bottom edge, no
-   gap) so the whole thing reads as one control that has expanded, matching
-   how the request wants it attached rather than floating as a separate
-   card. */
+   gap) so the whole thing reads as one control that has expanded, rather
+   than floating as a separate card. */
 .custom-dropdown.open .dropdown-selected {
-    background-color: #ffffff;
+    background-color: var(--st-white);
     border-color: rgba(0, 0, 0, 0.14);
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
@@ -282,11 +350,11 @@
     left: 0;
     width: 100%;
     z-index: 1000;
-    background-color: #ffffff;
+    background-color: var(--st-white);
     border: 1px solid rgba(0, 0, 0, 0.14);
     border-top: none;
-    border-bottom-left-radius: 8px;
-    border-bottom-right-radius: 8px;
+    border-bottom-left-radius: var(--st-radius);
+    border-bottom-right-radius: var(--st-radius);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
     opacity: 0;
     transition:
@@ -299,7 +367,6 @@
     opacity: 1;
 }
 
-/* option list. position:relative anchors the sliding hover pill below. */
 .dropdown-list {
     position: relative;
     min-height: 0;
@@ -314,60 +381,34 @@
     pointer-events: auto;
 }
 
-/* option rows: no per-item background anymore. The hover highlight is a
-   single .dropdown-hover-pill that slides between rows (wired in
-   settings.js), so items only handle text color; they sit above the pill
-   via z-index. */
+/* option rows: plain per-item hover background. */
 .dropdown-item {
     position: relative;
-    z-index: 1;
     padding: 9px 12px;
-    color: #495057;
+    color: var(--st-gray-7);
     font-size: 0.92rem;
     cursor: pointer;
     border-radius: 6px;
     box-sizing: border-box;
-    transition: color 0.15s ease;
+    transition:
+        color 0.15s ease,
+        background-color 0.12s ease;
 }
 
 .dropdown-item:hover {
-    color: #212529;
-}
-
-/* Sliding hover highlight: one rounded tint that follows the cursor from
-   row to row instead of each row lighting up as a separate hard rectangle.
-   JS sets top/height from the hovered item's offsets; entering the list
-   snaps it into place without transition (.no-motion), then subsequent
-   moves animate. Inset 4px to match the list padding so it never touches
-   the list edges. */
-.dropdown-hover-pill {
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 0;
-    height: 0;
+    color: var(--st-text);
     background-color: rgba(0, 0, 0, 0.07);
-    border-radius: 6px;
-    opacity: 0;
-    pointer-events: none;
-    transition:
-        top 0.18s cubic-bezier(0.3, 0.9, 0.4, 1),
-        height 0.18s cubic-bezier(0.3, 0.9, 0.4, 1),
-        opacity 0.12s ease;
 }
 
-.dropdown-hover-pill.visible {
-    opacity: 1;
-}
-
-.dropdown-hover-pill.no-motion {
-    transition: opacity 0.12s ease;
+/* current choice stays marked even when the pointer is on another row. */
+.dropdown-item.selected {
+    color: var(--st-text);
+    font-weight: 600;
 }
 
 /* local font option divider: drawn as a floating hairline in the gap above
    the row (::before) instead of a border-top on the row itself, so the
-   hover pill keeps a symmetric shape over this item rather than swallowing
-   an asymmetric padding-top. */
+   row keeps a symmetric hover shape rather than an asymmetric padding-top. */
 .dropdown-item[data-value="font-select"] {
     margin-top: 9px;
 }
@@ -380,6 +421,121 @@
     right: 8px;
     height: 1px;
     background-color: rgba(0, 0, 0, 0.08);
+}
+
+/* ====================================================================
+   6. Custom range sliders
+   ====================================================================
+   The three editor sliders share every style; :is() keeps the selector
+   lists readable (specificity is unchanged: :is() takes the highest of
+   its arguments, i.e. the same ID specificity as before). */
+
+/* Reset native appearance so track/thumb can be fully restyled the same
+   way across Chromium/WebKit and Firefox. --slider-fill is set inline
+   per-input by JS as a percentage; falls back to an all-neutral track. */
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider) {
+    --slider-fill: 0%;
+    flex: 1;
+    min-width: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 18px; /* generous hit area; visual track is drawn thinner below */
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Track: flat neutral groove matching .toggle-slider's resting gray, with a
+   filled-accent portion up to the thumb drawn via a linear-gradient
+   hard-stop at --slider-fill, so progress reads at a glance instead of a
+   plain uniform bar. */
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider)::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 4px;
+    background: linear-gradient(
+        to right,
+        var(--st-accent) var(--slider-fill),
+        var(--st-gray-4) var(--slider-fill)
+    );
+}
+
+/* Firefox draws the filled portion natively via ::-moz-range-progress. */
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider)::-moz-range-track {
+    height: 4px;
+    border-radius: 4px;
+    background: var(--st-gray-4);
+}
+
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider)::-moz-range-progress {
+    height: 4px;
+    border-radius: 4px;
+    background: var(--st-accent);
+}
+
+/* Thumb: solid accent circle with the same soft elevation as
+   .toggle-slider's knob, growing slightly on hover/active for tactile
+   feedback. */
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider)::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px; /* centers 16px thumb on 4px track */
+    border-radius: 50%;
+    background: var(--st-accent);
+    border: 2px solid var(--st-white);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition:
+        transform 0.12s ease,
+        box-shadow 0.12s ease;
+}
+
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider)::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--st-accent);
+    border: 2px solid var(--st-white);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition:
+        transform 0.12s ease,
+        box-shadow 0.12s ease;
+}
+
+/* NOTE: -webkit-* and -moz-* pseudo-element selectors must live in
+   separate rules. Chromium treats unknown -moz-* pseudo-elements as
+   invalid and drops the whole comma list, which silently killed these
+   hover/active effects in the original combined rules. */
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider):hover::-webkit-slider-thumb {
+    transform: scale(1.1);
+}
+
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider):hover::-moz-range-thumb {
+    transform: scale(1.1);
+}
+
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider):active::-webkit-slider-thumb {
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(24, 108, 217, 0.4);
+}
+
+:is(#editor-padding-slider, #editor-fontsize-slider, #editor-linespacing-slider):active::-moz-range-thumb {
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(24, 108, 217, 0.4);
+}
+
+/* fixed-width right-hand value indicators for alignment */
+:is(#editor-padding-value, #editor-fontsize-value, #editor-linespacing-value) {
+    font-size: 0.88rem;
+    color: var(--st-text);
+    width: 45px; /* fixed width keeps the right edge consistent */
+    text-align: center;
+    font-variant-numeric: tabular-nums; /* tabular numerals prevent horizontal jitter */
+    flex-shrink: 0;
+}
+
+/* default vertical margins between slider rows */
+#fontsize-slider-row,
+#linespacing-slider-row {
+    margin-top: 32px;
 }
 
 /* floating padding bar */
@@ -411,22 +567,16 @@
 
 #editor-padding-value-float {
     font-size: 0.88rem;
-    color: #666;
+    color: var(--st-text-muted);
     width: 32px;
     text-align: right;
 }
 
 /* ====================================================================
-   Default vertical margins between sliders
-   ==================================================================== */
-#fontsize-slider-row,
-#linespacing-slider-row {
-    margin-top: 32px;
-}
-
-/* ====================================================================
-   Slider-drag transparency overrides (fixed-position)
-   ==================================================================== */
+   7. Slider-drag transparency mode (fixed-position overrides)
+   ====================================================================
+   While a slider is being dragged, everything except the active row is
+   made transparent so the editor behind the modal previews the change. */
 
 /* 1. make the dim backdrop transparent while dragging */
 .settings-overlay.dragging-slider {
@@ -474,10 +624,9 @@
 .settings-overlay.dragging-slider .setting-card .setting-row.active-row {
     opacity: 1;
     pointer-events: auto;
-    background: #ededed;
-    border-radius: 16px;
+    background: var(--st-card-bg);
+    border-radius: var(--st-radius-lg);
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.18);
-
     margin-left: -32px;
     margin-right: -32px;
     padding: 20px 32px; /* 20px vertical inner padding */
@@ -492,141 +641,17 @@
 }
 
 /* Font Size / Line Spacing rows: 32px - 20px padding = 12px */
-.settings-overlay.dragging-slider .setting-card #fontsize-slider-row.active-row,
 .settings-overlay.dragging-slider
     .setting-card
-    #linespacing-slider-row.active-row {
+    :is(#fontsize-slider-row, #linespacing-slider-row).active-row {
     margin-top: 12px;
 }
-/* ====================================================================
-   Slider design matching & layout fine-tuning
-   ==================================================================== */
 
 /* ====================================================================
-   Custom range sliders
+   8. Toggle rows & switch
    ==================================================================== */
-/* Reset native appearance so track/thumb can be fully restyled the same
-   way across Chromium/WebKit and Firefox. */
-#editor-padding-slider,
-#editor-fontsize-slider,
-#editor-linespacing-slider {
-    flex: 1;
-    min-width: 0;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 18px; /* generous hit area; visual track is drawn thinner below */
-    background: transparent;
-    cursor: pointer;
-}
 
-/* Track: flat neutral groove matching .toggle-slider's resting gray, with a
-   filled-blue portion up to the thumb drawn via a linear-gradient hard-stop
-   at --slider-fill (set inline per-input by JS as a percentage), so progress
-   reads at a glance instead of a plain uniform bar. Falls back to an
-   all-neutral track if --slider-fill isn't set. */
-#editor-padding-slider,
-#editor-fontsize-slider,
-#editor-linespacing-slider {
-    --slider-fill: 0%;
-}
-
-#editor-padding-slider::-webkit-slider-runnable-track,
-#editor-fontsize-slider::-webkit-slider-runnable-track,
-#editor-linespacing-slider::-webkit-slider-runnable-track {
-    height: 4px;
-    border-radius: 4px;
-    background: linear-gradient(
-        to right,
-        #186cd9 var(--slider-fill),
-        #ced4da var(--slider-fill)
-    );
-}
-
-#editor-padding-slider::-moz-range-track {
-    height: 4px;
-    border-radius: 4px;
-    background: #ced4da;
-}
-#editor-padding-slider::-moz-range-progress,
-#editor-fontsize-slider::-moz-range-progress,
-#editor-linespacing-slider::-moz-range-progress {
-    height: 4px;
-    border-radius: 4px;
-    background: #186cd9;
-}
-#editor-fontsize-slider::-moz-range-track,
-#editor-linespacing-slider::-moz-range-track {
-    height: 4px;
-    border-radius: 4px;
-    background: #ced4da;
-}
-
-/* Thumb: solid blue circle with the same soft elevation as .toggle-slider's
-   knob, growing slightly on hover/active for tactile feedback. */
-#editor-padding-slider::-webkit-slider-thumb,
-#editor-fontsize-slider::-webkit-slider-thumb,
-#editor-linespacing-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    margin-top: -6px; /* centers 16px thumb on 4px track */
-    border-radius: 50%;
-    background: #186cd9;
-    border: 2px solid #ffffff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-    transition:
-        transform 0.12s ease,
-        box-shadow 0.12s ease;
-}
-
-#editor-padding-slider::-moz-range-thumb,
-#editor-fontsize-slider::-moz-range-thumb,
-#editor-linespacing-slider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #186cd9;
-    border: 2px solid #ffffff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-    transition:
-        transform 0.12s ease,
-        box-shadow 0.12s ease;
-}
-
-#editor-padding-slider:hover::-webkit-slider-thumb,
-#editor-fontsize-slider:hover::-webkit-slider-thumb,
-#editor-linespacing-slider:hover::-webkit-slider-thumb,
-#editor-padding-slider:hover::-moz-range-thumb,
-#editor-fontsize-slider:hover::-moz-range-thumb,
-#editor-linespacing-slider:hover::-moz-range-thumb {
-    transform: scale(1.1);
-}
-
-#editor-padding-slider:active::-webkit-slider-thumb,
-#editor-fontsize-slider:active::-webkit-slider-thumb,
-#editor-linespacing-slider:active::-webkit-slider-thumb,
-#editor-padding-slider:active::-moz-range-thumb,
-#editor-fontsize-slider:active::-moz-range-thumb,
-#editor-linespacing-slider:active::-moz-range-thumb {
-    transform: scale(1.15);
-    box-shadow: 0 2px 6px rgba(24, 108, 217, 0.4);
-}
-
-/* fixed-width right-hand value indicators for alignment */
-#editor-padding-value,
-#editor-fontsize-value,
-#editor-linespacing-value {
-    font-size: 0.88rem;
-    color: #212529;
-    width: 45px; /* fixed width keeps the right edge consistent */
-    text-align: center;
-    font-variant-numeric: tabular-nums; /* tabular numerals prevent horizontal jitter */
-    flex-shrink: 0;
-}
-
-/* ====================================================================
-   Toggle setting row (title + description on the left, switch on the right)
-   ==================================================================== */
+/* toggle setting row (title + description on the left, switch on the right) */
 .setting-toggle-row {
     display: flex;
     align-items: center;
@@ -648,13 +673,11 @@
 
 .setting-toggle-desc {
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--st-text-muted);
     line-height: 1.4;
 }
 
-/* ====================================================================
-   Backup toggle switch
-   ==================================================================== */
+/* toggle switch */
 .toggle-switch {
     position: relative;
     display: inline-block;
@@ -674,7 +697,7 @@
     position: absolute;
     cursor: pointer;
     inset: 0;
-    background-color: #ced4da;
+    background-color: var(--st-gray-4);
     transition: background-color 0.2s ease;
     border-radius: 24px;
 }
@@ -686,14 +709,14 @@
     width: 18px;
     left: 3px;
     bottom: 3px;
-    background-color: #ffffff;
+    background-color: var(--st-white);
     transition: transform 0.2s ease;
     border-radius: 50%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .toggle-switch input:checked + .toggle-slider {
-    background-color: #186cd9;
+    background-color: var(--st-accent);
 }
 
 .toggle-switch input:checked + .toggle-slider::before {
@@ -701,7 +724,7 @@
 }
 
 /* ====================================================================
-   Backup expand subpanel interaction styles
+   9. Backup subpanel, path picker, action buttons
    ==================================================================== */
 .backup-expand-subpanel {
     max-height: 0;
@@ -718,7 +741,7 @@
     max-height: 320px;
     opacity: 1;
     margin-top: 14px;
-    border-top: 1px solid #f1f3f5;
+    border-top: 1px solid var(--st-gray-1);
     padding-top: 14px;
 }
 
@@ -732,12 +755,12 @@
     flex: 1;
     min-width: 0;
     height: 32px;
-    background: #f1f3f5;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
+    background: var(--st-gray-1);
+    border: 1px solid var(--st-gray-3);
+    border-radius: var(--st-radius);
     padding: 0 10px;
     font-size: 0.88rem;
-    color: #495057;
+    color: var(--st-gray-7);
     outline: none;
     font-family: inherit;
 }
@@ -745,12 +768,12 @@
 .settings-action-btn {
     height: 32px;
     padding: 0 14px;
-    background: #ffffff;
-    border: 1px solid #ced4da;
-    border-radius: 8px;
+    background: var(--st-white);
+    border: 1px solid var(--st-gray-4);
+    border-radius: var(--st-radius);
     font-size: 0.88rem;
     font-weight: 500;
-    color: #495057;
+    color: var(--st-gray-7);
     cursor: pointer;
     font-family: inherit;
     transition:
@@ -759,13 +782,13 @@
 }
 
 .settings-action-btn:hover {
-    background: #f8f9fa;
-    border-color: #adb5bd;
-    color: #212529;
+    background: var(--st-gray-0);
+    border-color: var(--st-gray-5);
+    color: var(--st-text);
 }
 
 /* ====================================================================
-   Cloud backup credential form styles
+   10. Cloud backup credential form
    ==================================================================== */
 .cloud-credentials-form {
     display: flex;
@@ -783,7 +806,7 @@
 .cloud-input-row label {
     width: 90px;
     font-size: 0.85rem;
-    color: #495057;
+    color: var(--st-gray-7);
     font-weight: 500;
 }
 
@@ -796,37 +819,9 @@
 input[type="password"].path-text-input {
     font-family: monospace;
 }
-/* ====================================================================
-   Responsive Layout (Narrow Windows)
-   ==================================================================== */
-@media (max-width: 700px) {
-    .settings-body {
-        padding-left: 24px !important;
-        padding-right: 24px !important;
-    }
-
-    .setting-card {
-        padding: 24px !important;
-    }
-
-    .setting-row {
-        flex-wrap: wrap;
-    }
-
-    .setting-label {
-        width: 100%;
-        margin-bottom: 8px;
-    }
-
-    #editor-padding-value,
-    #editor-fontsize-value,
-    #editor-linespacing-value {
-        text-align: right;
-    }
-}
 
 /* ====================================================================
-   Backup snapshots card
+   11. Backup snapshots card & segmented control
    ====================================================================
    The generic .setting-label is a fixed 130px (sized for the slider rows in
    Appearance), which wraps longer labels and jams the rows together. This
@@ -836,9 +831,11 @@ input[type="password"].path-text-input {
 #snapshot-card .snapshot-row {
     align-items: center;
 }
+
 #snapshot-card .snapshot-row + .snapshot-row {
     margin-top: 26px;
 }
+
 .snapshot-label-block {
     display: flex;
     flex-direction: column;
@@ -846,16 +843,19 @@ input[type="password"].path-text-input {
     flex: 1;
     min-width: 0;
 }
+
 #snapshot-card .setting-label {
     width: auto; /* override the 130px slider-alignment width */
     font-weight: 500;
 }
+
 .snapshot-desc {
     margin: 0;
     font-size: 0.82rem;
-    color: #868e96;
+    color: var(--st-gray-6);
     line-height: 1.45;
 }
+
 /* Snapshot mode segmented control: a long track holding both options, with a
    white thumb that slides over the selected one. Thumb movement is a pure
    transform (no left/width animation) so it stays on the compositor. The
@@ -878,7 +878,7 @@ input[type="password"].path-text-input {
     bottom: 3px;
     left: 3px;
     width: calc(50% - 3px);
-    background-color: #ffffff;
+    background-color: var(--st-white);
     border-radius: 6px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
     transition: transform 0.25s cubic-bezier(0.3, 0.9, 0.4, 1);
@@ -913,7 +913,7 @@ input[type="password"].path-text-input {
 }
 
 .segmented-control .segment-option.active {
-    color: #212529;
+    color: var(--st-text);
     font-weight: 600;
     transform: scale(1);
     cursor: default;
@@ -927,25 +927,26 @@ input[type="password"].path-text-input {
     font-weight: 600;
     background-color: rgba(255, 255, 255, 0.5);
 }
+
 .snapshot-keep-input {
     width: 74px;
     flex: none;
     text-align: center;
-    /* The generic .path-text-input gray (#f1f3f5) all but vanishes on the
-       #ededed card. Match the Restore buttons instead (white surface,
-       #ced4da border) so the field reads as an actual control, with the
-       slider blue on focus. */
-    background: #ffffff;
-    border-color: #ced4da;
-    color: #212529;
+    /* The generic .path-text-input gray all but vanishes on the card
+       background. Match the Restore buttons instead (white surface,
+       gray-4 border) so the field reads as an actual control. */
+    background: var(--st-white);
+    border-color: var(--st-gray-4);
+    color: var(--st-text);
     transition:
         border-color 0.15s ease,
         box-shadow 0.15s ease;
 }
 
 .snapshot-keep-input:focus {
-    border-color: #adb5bd;
+    border-color: var(--st-gray-5);
 }
+
 /* Hide number-input spinners; the value is small and typed, and the default
    spinners read as visual noise against the flat inputs used elsewhere. */
 .snapshot-keep-input::-webkit-outer-spin-button,
@@ -955,13 +956,14 @@ input[type="password"].path-text-input {
 }
 
 /* ====================================================================
-   Restore tab
+   12. Restore tab
    ==================================================================== */
 #restore-card {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
+
 .restore-list {
     list-style: none;
     margin: 0;
@@ -969,15 +971,18 @@ input[type="password"].path-text-input {
     display: flex;
     flex-direction: column;
 }
+
 .restore-item {
     display: flex;
     align-items: center;
     gap: 16px;
     padding: 12px 4px;
 }
+
 .restore-item + .restore-item {
-    border-top: 1px solid #e9ecef;
+    border-top: 1px solid var(--st-gray-2);
 }
+
 .restore-item-info {
     display: flex;
     flex-direction: column;
@@ -985,59 +990,88 @@ input[type="password"].path-text-input {
     flex: 1;
     min-width: 0;
 }
+
 .restore-item-title {
     font-size: 0.95rem;
     font-weight: 500;
-    color: #343a40;
+    color: var(--st-gray-8);
 }
+
 .restore-item-meta {
     font-size: 0.78rem;
-    color: #adb5bd;
+    color: var(--st-gray-5);
 }
+
 .restore-item-btn {
     flex-shrink: 0;
-    border: 1px solid #dee2e6;
-    background: #fff;
-    color: #495057;
+    border: 1px solid var(--st-gray-3);
+    background: var(--st-white);
+    color: var(--st-gray-7);
     font-family: inherit;
     font-size: 0.85rem;
     font-weight: 500;
     padding: 6px 14px;
-    border-radius: 8px;
+    border-radius: var(--st-radius);
     cursor: pointer;
     transition:
         background 0.12s ease,
         color 0.12s ease,
         border-color 0.12s ease;
 }
+
 .restore-item-btn:hover {
-    background: #f1f3f5;
+    background: var(--st-gray-1);
 }
+
 /* Armed = one more click actually restores. Red enough to read as "this one
    is live", without a modal. */
 .restore-item-btn.armed {
-    background: #e03131;
-    border-color: #e03131;
-    color: #fff;
+    background: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-white);
 }
+
 .restore-item-btn.armed:hover {
-    background: #c92a2a;
+    background: var(--st-danger-hover);
 }
+
 .restore-item-btn:disabled {
     opacity: 0.55;
     cursor: default;
 }
+
 .restore-empty {
     font-size: 0.9rem;
-    color: #868e96;
+    color: var(--st-gray-6);
     padding: 8px 4px;
     list-style: none;
 }
 
-/* A second-level heading inside a panel that already opened with an <h2>
-   (Backup -> Restore). Same element as the panel title so the type scale
-   stays consistent, but with top margin so the sections read as separate
-   rather than as one long card stack. */
-.settings-subhead {
-    margin-top: 8px;
+/* ====================================================================
+   13. Responsive layout (narrow windows)
+   ====================================================================
+   Kept last so these rules win over the base rules by source order alone
+   (no !important needed). */
+@media (max-width: 700px) {
+    .settings-body {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    .setting-card {
+        padding: 24px;
+    }
+
+    .setting-row {
+        flex-wrap: wrap;
+    }
+
+    .setting-label {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    :is(#editor-padding-value, #editor-fontsize-value, #editor-linespacing-value) {
+        text-align: right;
+    }
 }

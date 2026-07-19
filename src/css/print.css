@@ -1,0 +1,93 @@
+/* ====================================================================
+   print.css — global print stylesheet for PDF export.
+
+   Load order: base.css → window.css → editor.css → titlebar.css →
+   dialogs.css → print.css. MUST load last: .editor-title / .cm-* rules here tie
+   with the screen rules in editor.css on specificity and win only by
+   source order.
+   ==================================================================== */
+
+@media print {
+    /* 1. hide all app chrome except the editor body */
+    .window-controls,
+    .sidebar,
+    .sidebar-resizer,
+    .toast-notification,
+    .context-menu,
+    #save-indicator {
+        display: none;
+    }
+
+    /* 2. reset fixed layouts to normal page flow */
+    html,
+    body,
+    .window,
+    .app-container,
+    .content,
+    .main-tab-content,
+    .file-editor-container {
+        position: static;
+        display: block;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        background: #ffffff;
+        color: #000000;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* 3. disable transitions and transforms */
+    .editor-content-inner {
+        display: block;
+        transform: none;
+        transition: none;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        padding: 0;
+    }
+
+    /* 4. place the title statically at the top of the page */
+    .editor-title {
+        position: static;
+        display: block;
+        width: 100%;
+        padding: 0;
+        margin-top: 10mm;
+        margin-bottom: 8mm;
+        font-size: 26pt;
+        font-weight: bold;
+        color: #000000;
+        background: transparent;
+    }
+
+    /* 5. release CodeMirror scroll guards so text flows across pages */
+    .editor-body,
+    .cm-editor,
+    .cm-scroller,
+    .cm-content {
+        position: static;
+        display: block;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* normalize line wrapping and print spacing */
+    .cm-line {
+        padding: 0;
+        margin: 3px 0;
+        word-break: break-word;
+        white-space: pre-wrap;
+    }
+
+    /* 6. A4 page size and margins */
+    @page {
+        size: A4;
+        margin: 20mm 18mm 20mm 18mm;
+    }
+}

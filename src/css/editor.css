@@ -1,0 +1,313 @@
+/* ====================================================================
+   editor.css — main content containers, editor surface (title + body),
+   CodeMirror layout overrides, image viewer, reading mode, editor
+   context-menu submenu.
+
+   Load order: base.css → window.css → editor.css → titlebar.css →
+   dialogs.css → print.css. Design tokens (--st-*) come from base.css.
+
+   Specificity note: the long `.window .app-container .editor-body …`
+   descendant selectors are deliberate — they must outweigh both
+   CodeMirror's injected styles and markdown-preview.css. Do not
+   shorten them.
+   ==================================================================== */
+
+/* --------------------------------------------------------------------
+   Content containers
+   -------------------------------------------------------------------- */
+.app-container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.main-tab-content {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.file-editor-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    overscroll-behavior-y: none;
+}
+.file-editor-container > * {
+    transition: transform 0.4s var(--st-ease-spring);
+    will-change: transform;
+}
+
+/* --------------------------------------------------------------------
+   Editor title + body
+   -------------------------------------------------------------------- */
+/* title input: transparent background, no border/outline */
+.editor-title {
+    position: absolute;
+    top: 40px; /* offset from the top of the scroller */
+    left: 0;
+    right: 0;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 40px var(--editor-padding, 12%); /* synced with the padding slider */
+    margin: 0;
+    font-size: 1.8rem;
+    /* 750: the document title should out-weigh an h1 (700) without jumping all
+       the way to the 800 that **strong** now owns. Only reachable because the
+       @font-face declares the full wght range — see base.css. */
+    font-weight: 750;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+    z-index: 10; /* above the body text layer */
+}
+
+/* body text area: transparent, borderless, scrollable */
+.editor-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    font-family: inherit;
+    outline: none;
+}
+
+.editor-spacer {
+    display: none;
+}
+
+.editor-content-inner {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    will-change: transform; /* pre-allocate a GPU layer */
+    transform: translateY(0);
+    transition: transform 0.4s var(--st-ease-spring);
+}
+
+/* --------------------------------------------------------------------
+   CodeMirror 6 layout overrides
+   -------------------------------------------------------------------- */
+.window .app-container .editor-body .cm-editor {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+}
+
+/* keep scroller full width so the scrollbar pins right */
+.window .app-container .editor-body .cm-scroller {
+    /* Vertical only. `overflow: auto` also opened a HORIZONTAL pan on the
+       whole editor, and this selector outweighs markdown-preview.css's
+       `.cm-editor .cm-scroller { overflow-x: hidden }` — so a long code
+       line panned the entire document sideways. Horizontal overflow is
+       handled exclusively inside fenced code blocks (each code line is its
+       own overflow-x container; see markdown-preview.css). */
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: inherit;
+    /* Side margins live HERE, not on .cm-content: drawSelection bounds its
+       full-line rectangles by contentDOM's rect, so content padding made
+       the selection highlight paint across the margins. The margins being
+       outside contentDOM means CM's own mouse handlers don't see margin
+       clicks — that gap is closed by the marginMouseDown extension in
+       markdown-preview.js, which forwards margin mousedowns into
+       contentDOM so CM's MouseSelection (not the browser's native
+       contenteditable drag, which can't cross widgets) drives every
+       selection. */
+    padding-left: var(--editor-padding, 12%);
+    padding-right: var(--editor-padding, 12%);
+    padding-top: 150px; /* top padding accounting for the title height */
+    position: relative; /* positioning context for the absolute title input */
+    box-sizing: border-box;
+}
+
+/* apply the padding variable only to the text layer */
+.window .app-container .editor-body .cm-content {
+    font-family: inherit;
+    /* Both fed by the settings sliders: UIManager.applyEditorFontSize /
+       applyEditorLineSpacing set --editor-font-size / --editor-line-height on
+       #editor-body (app.js), and this rule is what actually consumes them —
+       before this the two sliders were dead, only --editor-padding worked.
+       Fallbacks are the defaults shown in the settings panel. */
+    font-size: var(--editor-font-size, 1rem);
+    line-height: var(--editor-line-height, 1.6);
+    /* Korean line-breaking: keep-all breaks only at spaces (no wraps in the
+       middle of a Korean word unit), which is the single biggest readability
+       win for Korean body copy. overflow-wrap backstops the one failure
+       mode — an unbroken run (long URL, English identifier) wider than the
+       line would otherwise overflow. */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 10px;
+    padding-bottom: 120px;
+    box-sizing: border-box;
+    /* .cm-scroller is a flex container and .cm-content its flex item. The
+       default `min-width: auto` makes a flex item refuse to shrink below its
+       content's min-content width — and a fenced-code line is `white-space:
+       pre` (unbreakable), so ONE long code line inflated that minimum and
+       stretched .cm-content (and every code-line background filling it)
+       rightward as you typed. The line's own overflow-x:auto never fired
+       because its containing block was always as wide as its text; overflow
+       doesn't shrink an ancestor's intrinsic size. min-width:0 removes the
+       automatic minimum (and width:100% fixes the flex base size), so code
+       lines become fixed-width boxes and long code pans INSIDE them. */
+    min-width: 0;
+    width: 100%;
+}
+
+/* reset any per-line padding */
+.window .app-container .editor-body .cm-line {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.window .app-container .editor-body .cm-gutters {
+    display: none;
+}
+
+/* remove the active-line highlight */
+.window .app-container .editor-body .cm-activeLine {
+    background-color: transparent;
+}
+
+/* --------------------------------------------------------------------
+   CodeMirror 6 selection color (accent blue)
+   -------------------------------------------------------------------- */
+/* selection background when the editor is not focused */
+.window .app-container .editor-body .cm-editor .cm-selectionBackground {
+    background-color: rgba(var(--st-accent-rgb), 0.18);
+}
+
+/* selection background when the editor is focused */
+.window
+    .app-container
+    .editor-body
+    .cm-editor.cm-focused
+    .cm-selectionBackground {
+    background-color: rgba(var(--st-accent-rgb), 0.28);
+}
+
+/* override native ::selection styling */
+.window .app-container .editor-body .cm-editor ::selection {
+    background-color: rgba(var(--st-accent-rgb), 0.28);
+}
+
+/* --------------------------------------------------------------------
+   Image viewer
+   -------------------------------------------------------------------- */
+.image-viewer-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent; /* sync with the system theme */
+    overflow: hidden; /* keep the image from overflowing while dragging */
+}
+
+#viewer-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* id-level .hidden guards: defensive against possible id-specificity
+   display rules from other stylesheets that the generic .hidden utility
+   (0,1,0) could not beat */
+#image-viewer.hidden,
+#file-editor.hidden,
+#welcome-message.hidden {
+    display: none;
+}
+
+/* --------------------------------------------------------------------
+   Reading mode
+   -------------------------------------------------------------------- */
+#read-mode-btn.active {
+    background-color: transparent; /* theme blue transparency mapping */
+}
+
+.file-editor-container.reading-mode .editor-title {
+    cursor: default;
+}
+.file-editor-container.reading-mode .cm-content {
+    cursor: default;
+}
+
+/* enlarge only the read-mode button */
+#read-mode-btn {
+    width: 28px; /* expand the clickable area */
+    height: 28px;
+}
+#read-mode-btn.active:hover {
+    background-color: #d0d0d0;
+    opacity: 0.6;
+}
+
+/* enlarge only the read-mode icon */
+#read-mode-btn img {
+    width: 50%;
+    height: 50%;
+    transition: transform 0.15s ease;
+}
+#read-mode-btn:hover img {
+    transform: scale(1.05);
+}
+
+/* --------------------------------------------------------------------
+   Editor context menu submenu (Insert ›)
+   -------------------------------------------------------------------- */
+/* Parent row: label left, arrow hard right. Mirrors the table menu's
+   .has-submenu rule in markdown-preview.css so both menus read the same.
+   .context-menu-item is already display:flex, so only the justify is new. */
+.context-menu-item.has-submenu {
+    justify-content: space-between;
+}
+
+.context-menu-arrow {
+    margin-left: 12px;
+    opacity: 0.5;
+    font-size: 1.1em;
+    line-height: 1;
+}
+
+/* Positioned exactly like the table menu's submenus: position:fixed with
+   left/top written from JS at hover time. That means NO CSS placement here —
+   inheriting .context-menu's position:fixed is the whole point, and it also
+   sidesteps transform-origin drift, since a fixed element scaling about its
+   own center doesn't shift relative to the coordinates JS just gave it.
+   Only the stack order needs raising, so a submenu paints over its parent. */
+.context-submenu {
+    z-index: 10001;
+}

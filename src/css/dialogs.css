@@ -1,0 +1,140 @@
+/* ====================================================================
+   dialogs.css — custom confirm dialog (overlay, dialog box, actions).
+
+   Load order: base.css → window.css → editor.css → titlebar.css →
+   dialogs.css → print.css. Design tokens (--st-*) come from base.css.
+   ==================================================================== */
+
+.confirm-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: saturate(50%) contrast(80%);
+    -webkit-backdrop-filter: saturate(50%) contrast(80%);
+    /* No border-radius/clip-path here: .window already clips its children
+       via overflow: clip, and its own border-radius correctly toggles
+       between 16px (normal) and 0 (.window.squared, i.e. maximized/tiled).
+       Duplicating a fixed 16px radius here made the dim backdrop's corners
+       stay rounded even when the window was squared, leaving untouched,
+       non-dimmed corners visible in fullscreen/split-screen. */
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+.confirm-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.confirm-dialog {
+    background: var(--st-gray-0);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    width: 340px;
+    max-width: 90%;
+    /* Match .settings-modal's shadow weight/spread so every modal in the app
+       reads as the same elevation layer. */
+    box-shadow: 0 25px 36px rgba(0, 0, 0, 0.3);
+    transform: scale(0.96);
+    transition: transform 0.15s var(--st-ease-standard);
+}
+.confirm-overlay.visible .confirm-dialog {
+    transform: scale(1);
+}
+
+/* Icon badge: same rounded-square language as .add-btn (flat off-white
+   fill), tinted per dialog tone via .confirm-dialog--warning. */
+.confirm-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--st-card-bg);
+    margin-bottom: 14px;
+}
+.confirm-icon img {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+.confirm-dialog--warning .confirm-icon {
+    background: rgba(var(--st-danger-soft-rgb), 0.12);
+}
+
+.confirm-dialog h3 {
+    margin: 0 0 8px 0;
+    color: var(--st-text);
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+.confirm-dialog p {
+    margin: 0 0 20px 0;
+    color: var(--st-gray-7);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Shared button base matches .settings-action-btn / .add-btn: 8px radius,
+   0.88rem label, the same hover-transition timing used across the app. */
+.confirm-actions button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+
+.confirm-actions .secondary-btn {
+    /* Sits on the dialog's --st-gray-0 body, so give it a filled #ededed base
+       (--st-card-bg, the app's standard "card" surface) instead of white —
+       white on --st-gray-0 reads as almost no contrast at all. */
+    background: var(--st-card-bg);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: var(--st-gray-7);
+}
+.confirm-actions .secondary-btn:hover {
+    background: #e2e2e2;
+    border-color: rgba(0, 0, 0, 0.12);
+    color: var(--st-text);
+}
+
+.confirm-actions .primary-btn {
+    /* Same solid-blue accent used for selected tree rows / toggle switches. */
+    background: var(--st-accent);
+    border: 1px solid var(--st-accent);
+    color: var(--st-white);
+}
+.confirm-actions .primary-btn:hover {
+    background: var(--st-accent-hover);
+    border-color: var(--st-accent-hover);
+}
+
+.confirm-actions .warning-btn {
+    background: rgba(var(--st-danger-soft-rgb), 0.12);
+    border: 1px solid rgba(var(--st-danger-soft-rgb), 0.3);
+    color: var(--st-danger-soft);
+}
+.confirm-actions .warning-btn:hover {
+    background: rgba(var(--st-danger-soft-rgb), 0.2);
+    border-color: var(--st-danger-soft);
+}
