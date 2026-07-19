@@ -59,6 +59,7 @@ const ContextMenuManager = (() => {
   const closeAllMenus = () => {
     document.getElementById("sidebar-context-menu")?.classList.remove("show");
     document.getElementById("main-context-menu")?.classList.remove("show");
+    document.getElementById("ctx-main-insert-submenu")?.classList.remove("show");
     document.querySelectorAll(".item-label.context-selected").forEach((el) => {
       el.classList.remove("context-selected");
     });
@@ -231,8 +232,7 @@ const ContextMenuManager = (() => {
     setDisabled("ctx-main-selectall", !hasEditor);
     setDisabled("ctx-main-bold", !(hasEditor && !isReading));
     setDisabled("ctx-main-italic", !(hasEditor && !isReading));
-    setDisabled("ctx-main-inline-code", !(hasEditor && !isReading));
-    setDisabled("ctx-main-table", !(hasEditor && !isReading));
+    setDisabled("ctx-main-insert", !(hasEditor && !isReading));
     setDisabled("ctx-main-save", !(hasEditor && openFile && !isImage));
     setDisabled("ctx-main-copy-path", !openFile);
     setDisabled("ctx-main-reveal", !openFile);
@@ -987,12 +987,12 @@ const EditorMenuActions = (() => {
   // a non-blank line directly above would be swallowed as that header and the
   // real header becomes the delimiter — the whole block then fails to form.
   // Hence the blank line above whenever the current line has content.
-  const insertTable = (cols = 2, rows = 1) => {
+  const insertTable = (cols = 2, rows = 2) => {
     const view = getLiveEditor();
     if (!view || isReadingMode()) return;
 
     const md = serializeTable({
-      header: Array.from({ length: cols }, () => ``),
+      header: Array(cols).fill(""),
       aligns: Array(cols).fill(null),
       rows: Array.from({ length: rows }, () => Array(cols).fill("")),
     });
@@ -1007,7 +1007,69 @@ const EditorMenuActions = (() => {
       changes: { from: at, insert: before + md + after },
       // +2 clears the leading "| " of the header row, parking the caret on
       // the first cell's text so it can be typed over immediately.
-      selection: { anchor: at + before.length + 1 },
+      selection: { anchor: at + before.length + 2 },
+      scrollIntoView: true,
+    });
+    view.focus({ preventScroll: true });
+  };
+
+  // Fenced code block. backtickOnlyFence (smart-table.js) requires >=3
+  // backticks and rejects a "`" anywhere in the info string, so a bare ``` is
+  // the safe opener; the caret parks on the info-string slot so a language
+  // can be typed straight away.
+  const insertCodeBlock = () => {
+    const view = getLiveEditor();
+    if (!view || isReadingMode()) return;
+
+    const { state } = view;
+    const sel = state.selection.main;
+    const inner = state.sliceDoc(sel.from, sel.to);
+    const line = state.doc.lineAt(sel.from);
+
+    // With a selection, wrap it in place; otherwise open an empty block after
+    // the current line. Both need the surrounding blank lines a fence wants.
+    if (!sel.empty) {
+      const before = line.from === 0 ? "" : "\n";
+      view.dispatch({
+        changes: {
+          from: sel.from,
+          to: sel.to,
+          insert: before + "```\n" + inner + "\n```\n",
+        },
+        selection: { anchor: sel.from + before.length + 3 },
+        scrollIntoView: true,
+      });
+    } else {
+      const at = line.to;
+      const pre = line.text.trim() === "" ? "" : "\n\n";
+      const post = at === state.doc.length ? "\n" : "\n\n";
+      view.dispatch({
+        changes: { from: at, insert: pre + "```\n\n```" + post },
+        selection: { anchor: at + pre.length + 3 },
+        scrollIntoView: true,
+      });
+    }
+    view.focus({ preventScroll: true });
+  };
+
+  // Inline link. Selection becomes the label and the caret lands inside the
+  // empty (), ready for a URL; with no selection the caret lands in the label
+  // brackets instead.
+  const insertLink = () => {
+    const view = getLiveEditor();
+    if (!view || isReadingMode()) return;
+
+    const { state } = view;
+    const sel = state.selection.main;
+    const label = state.sliceDoc(sel.from, sel.to);
+
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: `[${label}]()` },
+      selection: {
+        anchor: sel.empty
+          ? sel.from + 1 // inside []
+          : sel.from + label.length + 3, // inside ()
+      },
       scrollIntoView: true,
     });
     view.focus({ preventScroll: true });
@@ -1029,6 +1091,8 @@ const EditorMenuActions = (() => {
     selectAll,
     toggleInlineMark,
     insertTable,
+    insertCodeBlock,
+    insertLink,
     saveNow,
     copyPath,
     showInFolder,
@@ -1061,7 +1125,17 @@ function initSidebarContextMenu() {
   document.addEventListener(
     "mousedown",
     (e) => {
-      if (!sidebarMenu?.contains(e.target) && !mainCtxMenu?.contains(e.target))
+      // The Insert submenu lives at <body>, NOT inside #main-context-menu, so
+      // it must be tested separately — otherwise this capture-phase handler
+      // closes both menus before a submenu item's click handler can run.
+      const insertSubmenuEl = document.getElementById(
+        "ctx-main-insert-submenu",
+      );
+      if (
+        !sidebarMenu?.contains(e.target) &&
+        !mainCtxMenu?.contains(e.target) &&
+        !insertSubmenuEl?.contains(e.target)
+      )
         ContextMenuManager.closeAllMenus();
     },
     true,
@@ -1090,6 +1164,96 @@ function initSidebarContextMenu() {
     revealInSidebar();
   });
 
+  // Submenu: hover-opened, positioned exactly like the table menu's submenus
+  // (markdown-table.js renderMenu) — position:fixed with left/top written
+  // here at hover time, inherited straight from .context-menu.
+  //
+  // The table menu overlaps its parent by 3px so the pointer never crosses a
+  // gap; we use a real gap instead, which means mouseleave on the parent WILL
+  // fire mid-crossing. So closing is deferred a beat and cancelled if the
+  // pointer lands on the submenu.
+  const insertParent = document.getElementById("ctx-main-insert");
+  const insertSubmenu = document.getElementById("ctx-main-insert-submenu");
+  if (insertParent && insertSubmenu) {
+    // Authored inside the parent row for readability, but moved to <body>
+    // here — exactly where markdown-table.js appends its menus. Left nested,
+    // it is a flex ITEM of the row (.context-menu-item is display:flex), so
+    // it stretches the row and is clipped by the parent menu's rounded box.
+    // At <body> it is a plain fixed-position sibling that owes nothing to
+    // the parent's layout.
+    document.body.appendChild(insertSubmenu);
+
+    const SUBMENU_GAP = 2;
+    let closeTimer = null;
+    const cancelClose = () => {
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+      }
+    };
+    const openSubmenu = () => {
+      cancelClose();
+      if (insertParent.classList.contains("disabled")) return;
+
+      // Measurable while hidden: .context-menu hides with opacity, not
+      // display, so it is always laid out.
+      const rect = insertParent.getBoundingClientRect();
+      const mw = insertSubmenu.offsetWidth;
+      const mh = insertSubmenu.offsetHeight;
+
+      let left = rect.right + SUBMENU_GAP;
+      // No room on the right -> flip to the left of the parent MENU (not the
+      // row) so the submenu never sits on top of the menu it came from.
+      if (left + mw > window.innerWidth - 6) {
+        const parentMenu = document.getElementById("main-context-menu");
+        const menuLeft = parentMenu
+          ? parentMenu.getBoundingClientRect().left
+          : rect.left;
+        left = Math.max(6, menuLeft - mw - SUBMENU_GAP);
+      }
+      // -5px lines the submenu's first row up with the parent row, matching
+      // the table menu's rect.top - 5.
+      const top = Math.max(
+        6,
+        Math.min(rect.top - 5, window.innerHeight - mh - 6),
+      );
+
+      insertSubmenu.style.left = `${left}px`;
+      insertSubmenu.style.top = `${top}px`;
+      insertSubmenu.classList.add("show");
+    };
+    const scheduleClose = () => {
+      cancelClose();
+      closeTimer = setTimeout(() => {
+        insertSubmenu.classList.remove("show");
+        closeTimer = null;
+      }, 180);
+    };
+
+    insertParent.addEventListener("mouseenter", openSubmenu);
+    insertParent.addEventListener("mouseleave", scheduleClose);
+    insertSubmenu.addEventListener("mouseenter", cancelClose);
+    insertSubmenu.addEventListener("mouseleave", scheduleClose);
+
+    // Hovering any OTHER row in the same menu closes the submenu at once —
+    // otherwise it lingers over unrelated items for the timeout's duration.
+    document
+      .getElementById("main-context-menu")
+      ?.querySelectorAll(".context-menu-item")
+      .forEach((row) => {
+        if (row === insertParent) return;
+        row.addEventListener("mouseenter", () => {
+          cancelClose();
+          insertSubmenu.classList.remove("show");
+        });
+      });
+
+    // Clicking the parent row is a no-op: it is not a command, so it must not
+    // reach bindMainItem's closeAllMenus(). (After reparenting, submenu
+    // clicks no longer bubble through this row at all.)
+    insertParent.addEventListener("click", (e) => e.stopPropagation());
+  }
+
   // Main editor menu: bind each item, always closing the menu first so the
   // action runs against a visually settled UI (matches the sidebar handlers).
   const bindMainItem = (id, handler) => {
@@ -1110,10 +1274,12 @@ function initSidebarContextMenu() {
   bindMainItem("ctx-main-italic", () =>
     EditorMenuActions.toggleInlineMark("*"),
   );
-  bindMainItem("ctx-main-inline-code", () =>
+  bindMainItem("ctx-main-ins-table", () => EditorMenuActions.insertTable());
+  bindMainItem("ctx-main-ins-codeblock", EditorMenuActions.insertCodeBlock);
+  bindMainItem("ctx-main-ins-inlinecode", () =>
     EditorMenuActions.toggleInlineMark("`"),
   );
-  bindMainItem("ctx-main-table", () => EditorMenuActions.insertTable());
+  bindMainItem("ctx-main-ins-link", EditorMenuActions.insertLink);
   bindMainItem("ctx-main-save", EditorMenuActions.saveNow);
   bindMainItem("ctx-main-copy-path", EditorMenuActions.copyPath);
   bindMainItem("ctx-main-show-in-folder", EditorMenuActions.showInFolder);

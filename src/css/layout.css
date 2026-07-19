@@ -1745,3 +1745,31 @@ body.titlebar-info-open .titlebar-path-segment {
     font-size: 0.76rem;
     color: #9aa0a6;
 }
+
+/* ====================================================================
+   Context menu submenu (Insert ›)
+   ==================================================================== */
+
+/* Parent row: label left, arrow hard right. Mirrors the table menu's
+   .has-submenu rule in markdown-preview.css so both menus read the same.
+   .context-menu-item is already display:flex, so only the justify is new. */
+.context-menu-item.has-submenu {
+    justify-content: space-between;
+}
+
+.context-menu-arrow {
+    margin-left: 12px;
+    opacity: 0.5;
+    font-size: 1.1em;
+    line-height: 1;
+}
+
+/* Positioned exactly like the table menu's submenus: position:fixed with
+   left/top written from JS at hover time. That means NO CSS placement here —
+   inheriting .context-menu's position:fixed is the whole point, and it also
+   sidesteps transform-origin drift, since a fixed element scaling about its
+   own center doesn't shift relative to the coordinates JS just gave it.
+   Only the stack order needs raising, so a submenu paints over its parent. */
+.context-submenu {
+    z-index: 10001;
+}

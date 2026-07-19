@@ -909,11 +909,35 @@
                 <div class="context-menu-item" id="ctx-main-italic">
                     <span>Italic</span>
                 </div>
-                <div class="context-menu-item" id="ctx-main-inline-code">
-                    <span>Inline Code</span>
-                </div>
-                <div class="context-menu-item" id="ctx-main-table">
-                    <span>Insert Table</span>
+                <div
+                    class="context-menu-item has-submenu"
+                    id="ctx-main-insert"
+                >
+                    <span>Insert</span>
+                    <span class="context-menu-arrow">&rsaquo;</span>
+                    <div
+                        class="context-menu context-submenu"
+                        id="ctx-main-insert-submenu"
+                    >
+                        <div class="context-menu-item" id="ctx-main-ins-table">
+                            <span>Table</span>
+                        </div>
+                        <div
+                            class="context-menu-item"
+                            id="ctx-main-ins-codeblock"
+                        >
+                            <span>Code Block</span>
+                        </div>
+                        <div
+                            class="context-menu-item"
+                            id="ctx-main-ins-inlinecode"
+                        >
+                            <span>Inline Code</span>
+                        </div>
+                        <div class="context-menu-item" id="ctx-main-ins-link">
+                            <span>Link</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="context-menu-divider"></div>
                 <div class="context-menu-item" id="ctx-main-save">
