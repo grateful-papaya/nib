@@ -49,8 +49,17 @@ export function createHBar({ container, onDrag }) {
   let dragging = false;
   let hideTimer = null;
   let destroyed = false;
+  // The thumb is NOT a descendant of the surface it scrolls — it lives in
+  // .cm-scroller while the owner routes pointer positions from its own
+  // element. So moving the pointer onto the thumb reads, to the owner, as
+  // leaving the surface: it fires pointerLeave(), near drops, and the fade
+  // timer runs to completion under a perfectly stationary cursor. Nothing can
+  // revive it either, because the owner sees no mousemove while the pointer
+  // rests on the thumb. Hence the thumb tracks its own hover, and that flag
+  // outranks anything the owner routes in.
+  let hoverThumb = false;
 
-  const isActive = () => visible || near || dragging;
+  const isActive = () => visible || near || dragging || hoverThumb;
 
   function thumbBox() {
     const total = m.clientWidth + m.maxScroll;
@@ -105,7 +114,7 @@ export function createHBar({ container, onDrag }) {
   function scheduleHide() {
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => {
-      if (dragging || near) return;
+      if (dragging || near || hoverThumb) return;
       hide();
     }, FADE_AFTER);
   }
@@ -127,7 +136,7 @@ export function createHBar({ container, onDrag }) {
   // Owner routes pointer positions in SCROLLER-CONTENT coordinates. Touches
   // only cached metrics — no layout reads.
   function pointer(x, y) {
-    if (destroyed || !m || dragging) return;
+    if (destroyed || !m || dragging || hoverThumb) return;
     const hr = m.hoverRect;
     const inside =
       x >= hr.left && x <= hr.right && y >= hr.top && y <= hr.bottom;
@@ -148,8 +157,34 @@ export function createHBar({ container, onDrag }) {
   }
 
   function pointerLeave() {
+    // The owner fires this when the pointer moves onto the thumb, so a hovered
+    // thumb must veto it — otherwise it hides the very thing under the cursor.
+    if (hoverThumb || dragging) return;
     near = false;
-    if (!dragging) scheduleHide();
+    scheduleHide();
+  }
+
+  // Hovering the thumb pins it open: no fade timer, and it stays thick. The
+  // pointer being on the thumb at all means the surface is in play, so this
+  // takes the same path as the owner's own "near" state.
+  function onThumbEnter() {
+    if (destroyed || !m) return;
+    hoverThumb = true;
+    clearTimeout(hideTimer);
+    near = true;
+    show();
+    render();
+  }
+
+  function onThumbLeave() {
+    hoverThumb = false;
+    if (destroyed || dragging) return;
+    // The owner will re-assert `near` on its next routed mousemove if the
+    // pointer merely stepped off the thumb onto the surface; until then treat
+    // it as left, and let the normal fade timer decide.
+    near = false;
+    render();
+    scheduleHide();
   }
 
   function showTemp() {
@@ -226,12 +261,16 @@ export function createHBar({ container, onDrag }) {
   }
 
   thumb.addEventListener("mousedown", onThumbDown);
+  thumb.addEventListener("mouseenter", onThumbEnter);
+  thumb.addEventListener("mouseleave", onThumbLeave);
 
   function destroy() {
     if (destroyed) return;
     destroyed = true;
     clearTimeout(hideTimer);
     thumb.removeEventListener("mousedown", onThumbDown);
+    thumb.removeEventListener("mouseenter", onThumbEnter);
+    thumb.removeEventListener("mouseleave", onThumbLeave);
     window.removeEventListener("mousemove", onDragMove, { capture: true });
     window.removeEventListener("mouseup", onDragUp, { capture: true });
     lastDragE = null;

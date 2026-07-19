@@ -479,7 +479,10 @@ export async function getTableExtension() {
           {
             label: "Row",
             danger: true,
-            disabled: headerRow,
+            // Removing the last body row would drop the table below the
+            // "complete" threshold in isCompleteTable() and bounce it back to
+            // raw markdown, so keep at least one row.
+            disabled: headerRow || m.rows.length <= 1,
             action: () => ops.deleteRow(m, r),
           },
           {
@@ -530,6 +533,10 @@ export async function getTableExtension() {
         label: n === 1 ? "Row" : "Rows",
         danger: true,
         action: () => {
+          // Same rule as the column branch below: wiping out every body row
+          // would leave a header-only table that isCompleteTable() refuses to
+          // render, so treat "delete all rows" as "delete the table".
+          if (n >= rows) return removeTable(view, wrap);
           m.rows.splice(bodyFrom, n);
           clearSel(wrap);
         },
@@ -828,6 +835,29 @@ export async function getTableExtension() {
     table.appendChild(tbody);
   }
 
+  // Hide an add-bar the instant it is pressed, BEFORE the row/column is
+  // inserted. Otherwise the "+" is still under the pointer while the table
+  // grows, the bar only slides out from under the cursor once the new DOM is
+  // laid out, and just then does :hover drop and the 0.12s fade begin — so the
+  // button visibly outlives the thing it created. Inline styles outrank the
+  // :hover rule in markdown-preview.css, and the suppression lifts as soon as
+  // the pointer leaves the bar or moves again, so a second click still works.
+  function suppressAddBar(el) {
+    if (el._addBarRelease) el._addBarRelease();
+    el.style.transition = "none";
+    el.style.opacity = "0";
+    const release = () => {
+      el._addBarRelease = null;
+      el.removeEventListener("mouseleave", release);
+      el.removeEventListener("mousemove", release);
+      el.style.transition = "";
+      el.style.opacity = "";
+    };
+    el._addBarRelease = release;
+    el.addEventListener("mouseleave", release);
+    el.addEventListener("mousemove", release);
+  }
+
   function buildDOM(wrap, view) {
     wrap.className = "cm-md-table-wrap";
     wrap._isMdTable = true;
@@ -890,6 +920,7 @@ export async function getTableExtension() {
     scroll.addEventListener(
       "scroll",
       () => {
+        if (wrap._syncAddCol) wrap._syncAddCol();
         syncBar();
         bar.showTemp();
       },
@@ -901,6 +932,7 @@ export async function getTableExtension() {
     // re-measured lazily on the next mouseenter anyway.
     let roRaf = false;
     const ro = new ResizeObserver(() => {
+      if (wrap._syncAddCol) wrap._syncAddCol();
       if (!bar.isActive() || roRaf) return;
       roRaf = true;
       window.requestAnimationFrame(() => {
@@ -909,6 +941,7 @@ export async function getTableExtension() {
       });
     });
     ro.observe(scroll);
+    ro.observe(table);
     // Hover routing: enter → fresh measure; move → cached-metrics hit test
     // (zero layout reads), rAF-coalesced like the app scrollbar.
     let moveRaf = false;
@@ -970,10 +1003,31 @@ export async function getTableExtension() {
     addCol.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      suppressAddBar(addCol);
       ops.insertCol(wrap._model, wrap._model.header.length);
       commit(view, wrap, null);
+      // The table just got wider, which can push its right edge out of view
+      // and hide the "+" by the rule below. Follow the new column so the bar
+      // stays where the user just clicked.
+      window.requestAnimationFrame(() => {
+        scroll.scrollLeft = scroll.scrollWidth;
+        if (wrap._syncAddCol) wrap._syncAddCol();
+      });
     });
     wrap.appendChild(addCol);
+
+    // The "+" is anchored to the wrap's VISIBLE right edge, not to the table's
+    // last column, so on a horizontally scrolled table it floats over a cut-off
+    // column and offers to append there — which is a lie about where the column
+    // lands and hides part of the table. Only offer it once the table's real
+    // right edge is on screen. display:none rather than opacity so it also
+    // stops taking hover while it's out of play.
+    wrap._syncAddCol = () => {
+      const atEnd =
+        scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft <= 1;
+      addCol.style.display = atEnd ? "" : "none";
+    };
+    wrap._syncAddCol();
 
     const addRow = document.createElement("span");
     addRow.className = "cm-md-table-addbar cm-md-table-addrow";
@@ -981,6 +1035,7 @@ export async function getTableExtension() {
     addRow.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      suppressAddBar(addRow);
       ops.insertRow(wrap._model, wrap._model.rows.length);
       commit(view, wrap, null);
     });
@@ -1156,6 +1211,7 @@ export async function getTableExtension() {
         closeMenu(dom);
         clearSel(dom);
         renderTable(dom);
+        if (dom._syncAddCol) dom._syncAddCol();
         return true;
       }
       dom.querySelectorAll("th, td").forEach((cell) => {
@@ -1173,6 +1229,7 @@ export async function getTableExtension() {
           renderTableMath(cell);
         }
       });
+      if (dom._syncAddCol) dom._syncAddCol();
       return true;
     }
     destroy(dom) {
@@ -1185,11 +1242,33 @@ export async function getTableExtension() {
     }
   }
 
+  // A Table node only earns a rendered widget once it is actually complete:
+  // header + delimiter + at least one body row (i.e. a minimum 1x1 grid).
+  // While the user is still typing "| | |" / "|-|-|" the header-only node
+  // would otherwise be replaced by a widget with the delimiter line left
+  // dangling underneath it, because trimTableEnd() stops at the last
+  // pipe-bearing TableHeader/TableRow and therefore excludes the delimiter.
+  // Cell *content* is deliberately not checked — an all-empty row is still a
+  // real 1x1 table and stays rendered so a skeleton can be filled in place.
+  function isCompleteTable(state, node) {
+    const c = node.node.cursor();
+    if (!c.firstChild()) return false;
+    do {
+      if (
+        c.name === "TableRow" &&
+        state.doc.sliceString(c.from, c.to).includes("|")
+      )
+        return true;
+    } while (c.nextSibling());
+    return false;
+  }
+
   function findTableRanges(state) {
     const ranges = [];
     syntaxTree(state).iterate({
       enter(node) {
         if (node.name !== "Table") return;
+        if (!isCompleteTable(state, node)) return false;
         ranges.push({
           from: state.doc.lineAt(node.from).from,
           to: trimTableEnd(state, node),
@@ -1200,11 +1279,64 @@ export async function getTableExtension() {
     return ranges;
   }
 
-  function buildDecosFromRanges(state, ranges) {
-    const decos = [];
+  // Reveal the raw markdown whenever the selection touches the table — that is
+  // what makes the source itself selectable and copyable with a normal drag.
+  const isRevealed = (state, r) => {
     const sel = state.selection.main;
+    return sel.from <= r.to && sel.to >= r.from;
+  };
+
+  // Revealing mid-drag is a layout feedback loop: the source block is a
+  // different height than the widget, so everything below it shifts, the same
+  // pointer coordinate now maps to a different document position, the
+  // selection slips back off the table, the widget returns, the layout shifts
+  // back — and that repeats for as long as the drag lasts. The cure is to make
+  // the reveal monotone while the mouse button is down: once a table has
+  // opened during this drag it stays open, so there is exactly one layout
+  // change instead of an oscillation. The latch is released on mouseup, which
+  // dispatches a selection transaction so the settled state is recomputed —
+  // needed when the drag ends outside a table it merely passed through.
+  const EMPTY_LATCH = new Set();
+  let pointerSelecting = false;
+  let latchUsed = false;
+
+  const dragTracker = EditorView.domEventHandlers({
+    mousedown(_e, view) {
+      if (pointerSelecting) return false;
+      pointerSelecting = true;
+      latchUsed = false;
+      const onUp = () => {
+        window.removeEventListener("mouseup", onUp, true);
+        pointerSelecting = false;
+        if (!latchUsed || !view.dom.isConnected) return;
+        view.dispatch({ selection: view.state.selection });
+      };
+      window.addEventListener("mouseup", onUp, true);
+      return false;
+    },
+  });
+
+  // Range starts whose source should be showing: the ones the selection
+  // touches, plus the ones the latch is holding open for the current drag.
+  // Keyed by `from` rather than array index so a mid-drag reparse that
+  // rebuilds the ranges array doesn't drop the latch.
+  function revealedSet(state, ranges, latch) {
+    const out = new Set();
+    for (const r of ranges)
+      if (isRevealed(state, r) || latch.has(r.from)) out.add(r.from);
+    return out;
+  }
+
+  const sameSet = (a, b) => {
+    if (a.size !== b.size) return false;
+    for (const v of a) if (!b.has(v)) return false;
+    return true;
+  };
+
+  function buildDecosFromRanges(state, ranges, revealed) {
+    const decos = [];
     for (const r of ranges) {
-      if (sel.from <= r.to && sel.to >= r.from) continue;
+      if (revealed.has(r.from)) continue;
       decos.push(
         Decoration.replace({
           widget: new TableWidget(state.doc.sliceString(r.from, r.to)),
@@ -1215,15 +1347,21 @@ export async function getTableExtension() {
     return Decoration.set(decos);
   }
 
-  return StateField.define({
+  const tableField = StateField.define({
     create(state) {
       const ranges = findTableRanges(state);
-      return { tree: syntaxTree(state), ranges, decos: buildDecosFromRanges(state, ranges) };
+      const revealed = revealedSet(state, ranges, EMPTY_LATCH);
+      return {
+        tree: syntaxTree(state),
+        ranges,
+        revealed,
+        decos: buildDecosFromRanges(state, ranges, revealed),
+      };
     },
     update(value, tr) {
       const tree = syntaxTree(tr.state);
-            const treeChanged = tree !== value.tree;
-            if (!tr.docChanged && !tr.selection && !treeChanged) return value;
+      const treeChanged = tree !== value.tree;
+      if (!tr.docChanged && !tr.selection && !treeChanged) return value;
       let ranges = value.ranges;
       if (tr.docChanged) {
         const mapped = [];
@@ -1252,8 +1390,29 @@ export async function getTableExtension() {
       } else if (treeChanged) {
         ranges = findTableRanges(tr.state);
       }
-      return { ranges, decos: buildDecosFromRanges(tr.state, ranges) };
+      // A doc change remaps positions, so the latch keys are stale — drop it.
+      const latch =
+        pointerSelecting && !tr.docChanged ? value.revealed : EMPTY_LATCH;
+      const revealed = revealedSet(tr.state, ranges, latch);
+      if (pointerSelecting && revealed.size) latchUsed = true;
+      // A pure selection move that changes nothing about what is rendered (the
+      // common case while dragging across the document) reuses the existing
+      // decoration set instead of re-parsing every table into a fresh widget.
+      if (
+        !tr.docChanged &&
+        ranges === value.ranges &&
+        sameSet(revealed, value.revealed)
+      )
+        return { tree, ranges, revealed, decos: value.decos };
+      return {
+        tree,
+        ranges,
+        revealed,
+        decos: buildDecosFromRanges(tr.state, ranges, revealed),
+      };
     },
     provide: (f) => EditorView.decorations.from(f, (v) => v.decos),
   });
+
+  return [dragTracker, tableField];
 }

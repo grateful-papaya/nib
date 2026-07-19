@@ -987,7 +987,7 @@ const EditorMenuActions = (() => {
   // a non-blank line directly above would be swallowed as that header and the
   // real header becomes the delimiter — the whole block then fails to form.
   // Hence the blank line above whenever the current line has content.
-  const insertTable = (cols = 2, rows = 2) => {
+  const insertTable = (cols = 2, rows = 1) => {
     const view = getLiveEditor();
     if (!view || isReadingMode()) return;
 
