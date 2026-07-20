@@ -1,0 +1,197 @@
+/* ====================================================================
+   Primitives — patterns shared by more than one stylesheet.
+
+   These were previously copy-pasted into the file tree, the outline and the
+   references list independently, which meant a change to "how a hovered row
+   looks" had to be made in three places and drifted between them. Nothing
+   here needs a new class in the markup: the selector lists target the
+   existing class names directly, so this is a pure de-duplication.
+
+   Scope note: this file used to describe itself as sidebar-only, but two of
+   its patterns have real consumers outside the sidebar — the non-draggable
+   icon rule covers .menu-popup-icon (overlays.css) and the grid accordion
+   now also drives the settings dropdown (settings-fields.css). The name is
+   the accurate one: these are app primitives, not sidebar primitives.
+
+   Loaded immediately after base.css and before every consumer, so any
+   consumer rule with equal-or-higher specificity still wins.
+   ==================================================================== */
+
+/* ── Row highlight pill ──────────────────────────────────────────────
+   Rows never paint their own background: the visible box is a ::before
+   sitting BEHIND the text (z-index -1 inside a z-index:1 row). Insetting it
+   2px on all sides is what produces the vertical rhythm between rows while
+   the row's own padding keeps the click hit-box continuous — i.e. no dead
+   pixels between rows, but visible gaps between highlights.
+
+   Consumers add state colors only (`.hovered::before`, `.active::before`, …);
+   the geometry lives here. */
+.item-label,
+.toc-item,
+.toc-ref-item {
+    position: relative;
+    z-index: var(--st-z-row);
+    cursor: pointer;
+    user-select: none;
+}
+
+.item-label::before,
+.toc-item::before,
+.toc-ref-item::before {
+    content: "";
+    position: absolute;
+    inset: var(--st-row-inset);
+    z-index: -1;
+    background-color: transparent;
+    border-radius: var(--st-radius);
+    transition: background-color var(--st-dur-fast) ease;
+}
+
+/* Neutral hover wash — identical in all three lists on purpose.
+
+   The asymmetry in this selector list is deliberate, not an oversight: the
+   tree rows key off a JS-applied `.hovered` class rather than the `:hover`
+   pseudo-class, because the tree owns drag-and-drop and has to be able to
+   suppress or relocate the highlight mid-drag. The outline and references
+   lists have no drag interaction, so plain `:hover` is correct there. */
+.item-label.hovered::before,
+.item-label.context-selected::before,
+.toc-item:hover::before,
+.toc-ref-item:hover::before {
+    background-color: var(--st-tint);
+}
+
+/* ── Empty-state notice ──────────────────────────────────────────────
+   "No files", "no matches", "no headings" — one voice for all three. */
+.tree-empty-notice,
+.search-result-empty,
+.toc-empty {
+    padding: 12px 8px;
+    font-size: 0.88rem;
+    color: var(--st-text-soft);
+    user-select: none;
+}
+
+/* ── Truncating label ────────────────────────────────────────────────
+   Split in two tiers because the References row has one of each: the
+   destination is a flexible label that absorbs the leftover width, while the
+   link label is a rigid one capped at a percentage. Both ellipsize; only the
+   flexible tier also needs to be told it may shrink.
+
+   `min-width: 0` is the load-bearing part of that second tier: without it a
+   flex item refuses to shrink below its content's intrinsic width and the
+   ellipsis never appears. */
+.item-text,
+.toc-item-text,
+.toc-ref-label,
+.toc-ref-dest {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-text,
+.toc-item-text,
+.toc-ref-dest {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Non-draggable inline icon ───────────────────────────────────────
+   Every icon in this app's chrome is decorative; letting the user start a
+   native image drag from one hijacks the tree's own drag-and-drop. */
+.tree-icon,
+.toc-arrow,
+.toc-ref-arrow,
+.section-arrow-icon,
+.dropdown-arrow-icon,
+.menu-popup-icon {
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* ── Arrow rotation ──────────────────────────────────────────────────
+   One motion language for every chevron: down = expanded, right = collapsed.
+   `.section-arrow-icon` and `.dropdown-arrow-icon` are the odd ones out
+   (they flip 180° rather than 90°), so only the transition is shared. */
+.toc-arrow,
+.toc-ref-arrow,
+.section-arrow-icon,
+.dropdown-arrow-icon {
+    transition:
+        transform var(--st-dur-accordion) var(--st-ease-standard),
+        opacity var(--st-dur-quick) ease;
+}
+
+.toc-arrow.collapsed,
+.toc-ref-arrow.collapsed {
+    transform: rotate(-90deg);
+}
+
+/* ── Drag guide band ─────────────────────────────────────────────────
+   The sidebar's width resizer and the outline panel's vertical split are the
+   same control rotated 90°: an invisible grab strip whose ::after is a band
+   scaled to 0 at rest, to half thickness when previewed, and solid while
+   dragging. Everything but the axis is identical, so everything but the
+   transform lives here — the two consumers previously carried byte-identical
+   copies of this transition and had already started to drift.
+
+   scale rather than width/height: the band must not trigger layout on any
+   frame of a drag, since the drag is also writing the sidebar's width.
+
+   Consumers own: position/inset, the scale axis, and the hover and dragging
+   states (their selectors are too different to share). */
+.sidebar-resizer::after,
+.toc-vsplit::after {
+    content: "";
+    position: absolute;
+    background-color: var(--st-guide);
+    transform-origin: center;
+    transition:
+        transform var(--st-dur-quick) var(--st-ease-standard),
+        background-color var(--st-dur-quick) ease;
+}
+
+/* ── Grid accordion ──────────────────────────────────────────────────
+   0fr ⇄ 1fr on grid-template-rows is the only way to animate to "content
+   height" without measuring it in JS. The inner wrapper MUST carry
+   `min-height: 0` (a grid item's automatic minimum is its content size,
+   which would defeat the 0fr) and `overflow: hidden` (to clip during the
+   fold).
+
+   Three consumers: the file tree's subtrees, the outline's reference
+   children, and the settings dropdown's option list. Only the collapsed
+   geometry is shared — each consumer declares its own `transition`, because
+   the dropdown fades opacity alongside the fold and the tree does not, and
+   `transition` is a shorthand that cannot be additively extended.
+
+   Cost note: grid-template-rows is a layout property, so this animation runs
+   on the main thread and relayouts the subtree each frame. That is the price
+   of animating to auto height; it is fine for the tens of rows these lists
+   hold, and would not be for hundreds. */
+.tree-children,
+.dropdown-list-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+}
+
+.tree-children {
+    transition: grid-template-rows var(--st-dur-accordion)
+        var(--st-ease-standard);
+}
+
+.tree-children.expanded {
+    grid-template-rows: 1fr;
+}
+
+.tree-children-inner,
+.toc-ref-children,
+.dropdown-list {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.tree-children-inner {
+    position: relative;
+}

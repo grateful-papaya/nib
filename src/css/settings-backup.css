@@ -1,0 +1,346 @@
+/* ====================================================================
+   settings-backup.css — the Backup and Restore tabs
+   ====================================================================
+   Loads after settings-fields.css. No literal colors; every value comes
+   from base.css tokens.
+
+   Contents:
+     1. Shared field & button base
+     2. Backup subpanel & path picker
+     3. Cloud credential form
+     4. Snapshot card
+     5. Segmented control
+     6. Restore tab
+   ==================================================================== */
+
+/* ====================================================================
+   1. Shared field & button base
+   ====================================================================
+   The text input and the two button flavors were three near-identical
+   declaration blocks. The common parts are hoisted here; each rule below
+   only states how it differs. Class names are unchanged, so no markup
+   edits are required. */
+.path-text-input,
+.settings-action-btn,
+.restore-item-btn {
+    box-sizing: border-box;
+    border-radius: var(--st-radius);
+    font-family: inherit;
+    font-size: 0.88rem;
+    color: var(--st-gray-7);
+    transition: var(--st-control-transition);
+}
+
+.path-text-input {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    padding: 0 10px;
+    background: var(--st-gray-1);
+    border: 1px solid var(--st-gray-3);
+    outline: none;
+}
+
+/* Credential fields: monospace so a long opaque token stays scannable. */
+input[type="password"].path-text-input {
+    font-family: var(--st-mono);
+}
+
+.settings-action-btn {
+    height: 32px;
+    padding: 0 14px;
+    background: var(--st-white);
+    border: 1px solid var(--st-gray-4);
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.settings-action-btn:hover {
+    background: var(--st-gray-0);
+    border-color: var(--st-gray-5);
+    color: var(--st-text);
+}
+
+/* ====================================================================
+   2. Backup subpanel & path picker
+   ====================================================================
+   max-height animation rather than the grid 0fr->1fr fold in primitives.css: this panel's content height is known and bounded, and the
+   border-top has to appear only once expanded, which is simpler to time
+   against a max-height keyframe. */
+.backup-expand-subpanel {
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition:
+        max-height var(--st-dur-accordion) ease,
+        opacity var(--st-dur-accordion) ease,
+        margin-top var(--st-dur-accordion) ease;
+}
+
+.backup-expand-subpanel.expanded {
+    max-height: 320px; /* must exceed the tallest possible content */
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--st-gray-1);
+    opacity: 1;
+}
+
+.path-picker-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ====================================================================
+   3. Cloud credential form
+   ==================================================================== */
+.cloud-credentials-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.cloud-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cloud-input-row label {
+    width: 90px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--st-gray-7);
+}
+
+.cloud-action-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+/* ====================================================================
+   4. Snapshot card
+   ====================================================================
+   The generic .setting-label is a fixed 130px (sized for the slider rows in
+   Appearance), which wraps longer labels and jams the rows together. This
+   card uses a two-line label block — title over a muted description — with
+   the control pushed to the right edge, and real vertical rhythm between
+   rows. */
+#snapshot-card .snapshot-row {
+    align-items: center;
+}
+
+#snapshot-card .snapshot-row + .snapshot-row {
+    margin-top: 26px;
+}
+
+#snapshot-card .setting-label {
+    width: auto; /* override the 130px slider-alignment width */
+    font-weight: 500;
+}
+
+.snapshot-label-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+
+.snapshot-desc {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--st-gray-6);
+}
+
+/* The generic .path-text-input gray all but vanishes on the card background,
+   so this one matches the Restore buttons instead (white surface, gray-4
+   border) and reads as an actual control. */
+.snapshot-keep-input {
+    flex: none;
+    width: 74px;
+    background: var(--st-white);
+    border-color: var(--st-gray-4);
+    color: var(--st-text);
+    text-align: center;
+}
+
+.snapshot-keep-input:focus {
+    border-color: var(--st-gray-5);
+}
+
+/* Hide the number spinners; the value is small and typed, and the default
+   spinners read as visual noise against the flat inputs used elsewhere. */
+.snapshot-keep-input::-webkit-outer-spin-button,
+.snapshot-keep-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ====================================================================
+   5. Segmented control
+   ====================================================================
+   A long track holding both options, with a white thumb that slides over the
+   selected one. Thumb movement is a pure transform — no left/width animation
+   — so it stays on the compositor. The two halves are equal width, which
+   keeps the slide a plain translateX of the thumb's own width. */
+.segmented-control {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    width: 240px;
+    padding: 3px;
+    box-sizing: border-box;
+    background-color: var(--st-track-bg);
+    border-radius: 9px; /* 3px inset + the 6px thumb radius = concentric */
+}
+
+.segmented-thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    background-color: var(--st-white);
+    border-radius: var(--st-radius-md);
+    box-shadow: var(--st-shadow-knob);
+    pointer-events: none;
+    transition: transform var(--st-dur-slow) var(--st-ease-snap);
+}
+
+/* translateX(100%) moves the thumb by its own width (50% - 3px), landing its
+   left edge exactly on the track midline. */
+.segmented-control[data-value="daily"] .segmented-thumb {
+    transform: translateX(100%);
+}
+
+/* scale(0.92) at rest, 1 when active: the selected option grows into the
+   thumb as the thumb arrives under it. */
+.segment-option {
+    position: relative; /* lifts the label above the thumb */
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    border-radius: var(--st-radius-md);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transform: scale(0.92);
+    transition:
+        color var(--st-dur-slow) ease,
+        transform var(--st-dur-slow) var(--st-ease-snap),
+        background-color var(--st-dur-slow) ease,
+        font-weight var(--st-dur-slow) ease;
+}
+
+.segmented-control .segment-option.active {
+    color: var(--st-text);
+    font-weight: 600;
+    transform: scale(1);
+    cursor: default;
+}
+
+/* The thumb already marks the active option; a hover wash on top of it would
+   just muddy the white. */
+.segmented-control .segment-option.active:hover {
+    background-color: transparent;
+}
+
+.segmented-control .segment-option:not(.active):hover {
+    background-color: var(--st-tint-light);
+    font-weight: 600;
+}
+
+/* ====================================================================
+   6. Restore tab
+   ==================================================================== */
+#restore-card {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.restore-list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.restore-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 4px;
+}
+
+/* Separator between rows only, never above the first or below the last. */
+.restore-item + .restore-item {
+    border-top: 1px solid var(--st-gray-2);
+}
+
+.restore-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.restore-item-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--st-gray-8);
+}
+
+.restore-item-meta {
+    font-size: 0.78rem;
+    color: var(--st-gray-5);
+}
+
+.restore-item-btn {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    background: var(--st-white);
+    border: 1px solid var(--st-gray-3);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.restore-item-btn:hover {
+    background: var(--st-gray-1);
+}
+
+/* Armed = one more click actually restores. Red enough to read as "this one
+   is live", without a modal. */
+.restore-item-btn.armed {
+    background: var(--st-danger);
+    border-color: var(--st-danger);
+    color: var(--st-white);
+}
+
+.restore-item-btn.armed:hover {
+    background: var(--st-danger-hover);
+}
+
+.restore-item-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.restore-empty {
+    padding: 8px 4px;
+    font-size: 0.9rem;
+    color: var(--st-gray-6);
+    list-style: none;
+}

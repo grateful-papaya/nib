@@ -1,0 +1,195 @@
+/* ====================================================================
+   settings-shell.css — the settings modal's frame
+   ====================================================================
+   Everything that exists whichever tab is open: the overlay and its scrim,
+   the modal box, the left menu rail, the header, the scrolling body, and
+   panel visibility. Field widgets live in settings-fields.css, the
+   Backup/Restore tabs in settings-backup.css, and the switch and toggle row
+   in controls.css (app-wide, not settings-specific).
+
+   Loads after base.css and consumes its tokens. No literal colors here.
+
+   Contents:
+     1. Overlay & scrim
+     2. Modal shell
+     3. Left menu rail
+     4. Main column: header, close button, body
+     5. Panels
+     6. Responsive (narrow windows)
+   ==================================================================== */
+
+/* ====================================================================
+   1. Overlay & scrim
+   ==================================================================== */
+
+/* The overlay itself carries only the backdrop-filter. The dim scrim is a
+   separate ::before so slider-drag mode (settings-fields.css §6) can drop
+   the dimming without also dropping the filter, and vice versa. */
+.settings-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    backdrop-filter: saturate(50%) contrast(80%);
+    border-radius: var(--st-radius-lg);
+    overflow: visible;
+    opacity: 0;
+    pointer-events: none;
+    z-index: var(--st-z-settings);
+    transition: opacity var(--st-dur-fast) ease;
+}
+
+.settings-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--st-scrim);
+    border-radius: var(--st-radius-lg);
+    transition: opacity var(--st-dur-accordion) ease;
+}
+
+.settings-overlay.visible {
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ====================================================================
+   2. Modal shell
+   ==================================================================== */
+.settings-modal {
+    display: flex;
+    width: 90%;
+    max-width: 90vw;
+    height: 85%;
+    max-height: 80vh;
+    box-sizing: border-box;
+    background: var(--st-surface);
+    border: 1px solid var(--st-hairline);
+    border-radius: var(--st-radius-lg);
+    box-shadow: var(--st-shadow-modal);
+    overflow: hidden;
+}
+
+/* ====================================================================
+   3. Left menu rail
+   ==================================================================== */
+.settings-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 15%;
+    min-width: 140px;
+    box-sizing: border-box;
+    background: var(--st-sidebar-bg);
+}
+
+.settings-menu {
+    flex: 1;
+    margin: 0;
+    padding: 12px 8px;
+    list-style: none;
+    overflow-y: auto;
+}
+
+.settings-menu li {
+    margin: 4px;
+    padding: 16px;
+    border-radius: 12px; /* one-off: softer than the cards it sits beside */
+    font-size: 1rem;
+    color: var(--st-gray-7);
+    cursor: pointer;
+    transition:
+        background var(--st-dur-fast),
+        color var(--st-dur-fast);
+}
+
+.settings-menu li:hover {
+    background: var(--st-tint-subtle);
+}
+
+.settings-menu li.active {
+    background: var(--st-tint-strong);
+    font-weight: 700;
+}
+
+/* ====================================================================
+   4. Main column
+   ==================================================================== */
+.settings-main {
+    display: flex;
+    flex-direction: column;
+    width: 85%;
+    min-width: 0;
+    background: var(--st-surface);
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 56px;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+
+.settings-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: auto;
+    padding: 0;
+    box-sizing: content-box;
+    border: none;
+    border-radius: 50%;
+}
+
+.settings-close-btn img {
+    display: block;
+    width: 40%;
+    height: 40%;
+}
+
+.settings-body {
+    flex: 1;
+    order: 2; /* keeps the body below .settings-bottom in DOM-agnostic order */
+    padding: 20px 80px 0;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+/* ====================================================================
+   5. Panels
+   ==================================================================== */
+.settings-panel {
+    display: none;
+}
+
+.settings-panel.active {
+    display: block;
+}
+
+/* A second-level heading inside a panel that already opened with an <h2>
+   (Backup -> Restore). Same element as the panel title so the type scale
+   stays consistent, but with top margin so the sections read as separate
+   rather than as one long card stack. */
+.settings-subhead {
+    margin-top: 8px;
+}
+
+/* ====================================================================
+   6. Responsive (narrow windows)
+   ====================================================================
+   Last in the file so it wins over the rules above by source order alone
+   (no !important needed). Each settings sheet carries its own media block
+   at its own end, for the same reason. */
+@media (max-width: 700px) {
+    .settings-body {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+}

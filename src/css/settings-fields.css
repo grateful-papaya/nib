@@ -1,0 +1,448 @@
+/* ====================================================================
+   settings-fields.css — the field widgets inside the settings modal
+   ====================================================================
+   Was the middle third of settings.css. Named "fields", not "controls",
+   because controls.css already owns the app-wide switch and toggle row —
+   the two files are not alternatives, and the old settings-controls.css
+   name made them look like they were.
+
+   Loads after settings-shell.css. No literal colors or durations; every
+   value comes from base.css tokens.
+
+   Contents:
+     1. Setting cards & rows
+     2. About links
+     3. Custom dropdown
+     4. Range sliders
+     5. Floating padding bar
+     6. Slider-drag preview mode
+     7. Responsive (narrow windows)
+   ==================================================================== */
+
+/* ====================================================================
+   1. Setting cards & rows
+   ==================================================================== */
+.setting-card {
+    width: 100%;
+    padding: 32px;
+    margin-bottom: 32px;
+    box-sizing: border-box;
+    background-color: var(--st-card-bg);
+    border-radius: var(--st-radius-lg);
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    margin-top: 0;
+}
+
+.setting-label {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 130px; /* aligns every slider track to one common start baseline */
+    font-size: 1rem;
+}
+
+/* ====================================================================
+   2. About links
+   ==================================================================== */
+.about a {
+    color: var(--st-link);
+    text-decoration: none;
+    transition: color var(--st-dur-accordion);
+}
+
+.about a:hover {
+    color: var(--st-link-hover);
+    text-decoration: underline;
+}
+
+/* ====================================================================
+   3. Custom dropdown
+   ====================================================================
+   The open/close fold is the grid accordion primitive (primitives.css):
+   .dropdown-list-wrapper gets `display:grid; grid-template-rows:0fr` there,
+   .dropdown-list gets `min-height:0; overflow:hidden`. Only the parts that
+   are specific to this dropdown live here. */
+.custom-dropdown {
+    position: relative;
+    width: 100%;
+    max-width: 300px;
+    margin-top: 8px;
+    font-family: inherit;
+}
+
+.custom-dropdown,
+.custom-dropdown *,
+.custom-dropdown *::before,
+.custom-dropdown *::after {
+    box-sizing: border-box;
+}
+
+/* Trigger: lighter than the card background so it reads as a distinct,
+   liftable control rather than blending into the card behind it. The app's
+   base surface color (lighter than any card surface) gives real contrast at
+   rest; hover moves toward pure white so the difference is unambiguous
+   rather than one gray shade away from another. */
+.dropdown-selected {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    background-color: var(--st-surface);
+    border: 1px solid var(--st-hairline);
+    border-radius: var(--st-radius);
+    font-size: 1rem;
+    color: var(--st-gray-7);
+    cursor: pointer;
+    transition: var(--st-control-transition);
+}
+
+.dropdown-selected:hover {
+    background-color: var(--st-control-bg-hover);
+    border-color: var(--st-hairline-hover);
+}
+
+/* Open: the trigger fuses with the list below it (flat bottom edge, no gap)
+   so the whole thing reads as one control that has expanded, rather than as
+   a separate card floating underneath. */
+.custom-dropdown.open .dropdown-selected {
+    background-color: var(--st-white);
+    border-color: var(--st-hairline-hover);
+    border-bottom-color: transparent;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* Arrow icon (assets/arrow-down.svg). Sizing and rotation only — the
+   no-drag behavior and the transition come from primitives.css, alongside
+   every other chevron in the app. Centered by flex, not absolute
+   positioning, so it stays put as the trigger's height changes. */
+.dropdown-arrow-icon {
+    width: 11px;
+    height: 11px;
+    opacity: 0.55;
+}
+
+.custom-dropdown.open .dropdown-arrow-icon {
+    transform: rotate(180deg);
+    opacity: 0.85;
+}
+
+/* Sits flush under the trigger (no gap), and only the wrapper — not the
+   inner <ul> — carries the border/radius/shadow, so the seam with the
+   trigger disappears while open. */
+.dropdown-list-wrapper {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    z-index: var(--st-z-dropdown);
+    background-color: var(--st-white);
+    border: 1px solid var(--st-hairline-hover);
+    border-top: none;
+    border-bottom-left-radius: var(--st-radius);
+    border-bottom-right-radius: var(--st-radius);
+    box-shadow: var(--st-shadow-menu);
+    opacity: 0;
+    transition:
+        grid-template-rows var(--st-dur-accordion) var(--st-ease-standard),
+        opacity var(--st-dur-quick) ease;
+}
+
+.custom-dropdown.open .dropdown-list-wrapper {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+.dropdown-list {
+    position: relative;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    pointer-events: none;
+}
+
+.custom-dropdown.open .dropdown-list {
+    pointer-events: auto;
+}
+
+.dropdown-item {
+    position: relative;
+    padding: 9px 12px;
+    box-sizing: border-box;
+    border-radius: var(--st-radius-md);
+    font-size: 0.92rem;
+    color: var(--st-gray-7);
+    cursor: pointer;
+    transition:
+        color var(--st-dur-quick) ease,
+        background-color var(--st-dur-fast) ease;
+}
+
+.dropdown-item:hover {
+    background-color: var(--st-tint-soft);
+    color: var(--st-text);
+}
+
+/* The current choice stays marked even while the pointer is on another row. */
+.dropdown-item.selected {
+    color: var(--st-text);
+    font-weight: 600;
+}
+
+/* Local-font option divider: drawn as a floating hairline in the gap above
+   the row (::before) instead of as a border-top on the row itself, so the row
+   keeps a symmetric hover shape rather than an asymmetric padding-top. */
+.dropdown-item[data-value="font-select"] {
+    margin-top: 9px;
+}
+
+.dropdown-item[data-value="font-select"]::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 8px;
+    right: 8px;
+    height: 1px;
+    background-color: var(--st-tint);
+}
+
+/* ====================================================================
+   4. Range sliders
+   ====================================================================
+   Selector note: this was previously eleven repetitions of
+   `:is(#editor-padding-slider, #editor-fontsize-slider,
+   #editor-linespacing-slider)`. Those are the only <input type="range">
+   elements in the app, so the type selector is equivalent and an order of
+   magnitude more readable. It is intentionally NOT scoped under
+   .settings-body: the padding slider is reparented into .padding-slider-float
+   while dragging, and a descendant scope would drop its styling mid-gesture.
+   If a range input is ever added elsewhere, narrow this to a shared class
+   rather than reinstating the ID list.
+
+   Prefix note: only -webkit-* pseudo-elements are defined. The app ships in
+   Electron (Chromium), so the parallel ::-moz-range-track / -progress /
+   -thumb rules were dead code and are removed. Reinstate them if this CSS
+   is ever served to Gecko.
+
+   --slider-fill is set inline per-input by JS as a percentage; the 0%
+   default falls back to an all-neutral track. */
+input[type="range"] {
+    --slider-fill: 0%;
+    flex: 1;
+    min-width: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 18px; /* generous hit area; the visual track is drawn thinner */
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Track: flat neutral groove matching the switch's resting gray, with the
+   portion up to the thumb filled in accent via a linear-gradient hard stop at
+   --slider-fill, so progress reads at a glance instead of as a uniform bar. */
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 4px;
+    background: linear-gradient(
+        to right,
+        var(--st-accent) var(--slider-fill),
+        var(--st-gray-4) var(--slider-fill)
+    );
+}
+
+/* Thumb: solid accent circle with the same soft elevation as the switch
+   knob, growing slightly on hover/active for tactile feedback. */
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px; /* centers the 16px thumb on the 4px track */
+    background: var(--st-accent);
+    border: 2px solid var(--st-white);
+    border-radius: 50%;
+    box-shadow: var(--st-shadow-thumb);
+    transition:
+        transform var(--st-dur-fast) ease,
+        box-shadow var(--st-dur-fast) ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+    transform: scale(1.1);
+}
+
+input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.15);
+    box-shadow: var(--st-shadow-thumb-active);
+}
+
+/* Right-hand value readouts. Fixed width + tabular numerals keep the right
+   edge still while the digits change. */
+:is(#editor-padding-value, #editor-fontsize-value, #editor-linespacing-value) {
+    flex-shrink: 0;
+    width: 45px;
+    font-size: 0.88rem;
+    color: var(--st-text);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Default vertical rhythm between slider rows. */
+#fontsize-slider-row,
+#linespacing-slider-row {
+    margin-top: 32px;
+}
+
+/* ====================================================================
+   5. Floating padding bar
+   ==================================================================== */
+.padding-slider-float {
+    position: fixed;
+    bottom: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    z-index: var(--st-z-float-bar);
+    background: var(--st-float-bar-bg);
+    border: 1px solid var(--st-hairline);
+    border-radius: var(--st-radius-pill);
+    box-shadow: var(--st-shadow-float);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity var(--st-dur-accordion) ease;
+}
+
+.padding-slider-float.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+#editor-padding-value-float {
+    width: 32px;
+    font-size: 0.88rem;
+    color: var(--st-text-muted);
+    text-align: right;
+}
+
+/* ====================================================================
+   6. Slider-drag preview mode
+   ====================================================================
+   While a slider is being dragged, everything except the active row goes
+   transparent so the editor behind the modal previews the change live.
+   These rules deliberately reach across into shell/card territory; they are
+   kept together here because they are one feature, and they win on
+   specificity regardless of stylesheet order. */
+
+/* a. drop the backdrop filter and the scrim */
+.settings-overlay.dragging-slider {
+    backdrop-filter: none;
+}
+
+.settings-overlay.dragging-slider::before {
+    opacity: 0;
+    transition: none;
+}
+
+/* b. dissolve the modal frame */
+.settings-overlay.dragging-slider .settings-modal,
+.settings-overlay.dragging-slider .settings-main {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* c. hide the menu rail, header and titles */
+.settings-overlay.dragging-slider .settings-sidebar,
+.settings-overlay.dragging-slider .settings-header,
+.settings-overlay.dragging-slider .settings-bottom,
+.settings-overlay.dragging-slider .settings-body h2 {
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
+}
+
+/* d. strip card backgrounds */
+.settings-overlay.dragging-slider .settings-panel > .setting-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* e. hide non-active rows but keep their space, so nothing reflows */
+.settings-overlay.dragging-slider .setting-card .setting-row {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* f. re-materialize the active row alone, as a compact floating box. The
+      negative side margins cancel the card's 32px padding so the box spans
+      the card's full width. */
+.settings-overlay.dragging-slider .setting-card .setting-row.active-row {
+    opacity: 1;
+    pointer-events: auto;
+    margin-left: -32px;
+    margin-right: -32px;
+    padding: 20px 32px;
+    background: var(--st-card-bg);
+    border-radius: var(--st-radius-lg);
+    box-shadow: var(--st-shadow-lift);
+}
+
+/* g. Offset that new 20px of vertical padding by pulling each row up, so the
+      content stays put instead of jumping down as the box appears.
+      Padding row: original margin 0, so pull the full 20px.
+      Font Size / Line Spacing rows: 32px - 20px = 12px. */
+.settings-overlay.dragging-slider .setting-card #padding-slider-row.active-row {
+    margin-top: -20px;
+}
+
+.settings-overlay.dragging-slider
+    .setting-card
+    :is(#fontsize-slider-row, #linespacing-slider-row).active-row {
+    margin-top: 12px;
+}
+
+/* ====================================================================
+   7. Responsive (narrow windows)
+   ====================================================================
+   Last in the file so it wins over the rules above by source order alone
+   (no !important needed). Each settings sheet carries its own media block
+   at its own end, for the same reason. */
+@media (max-width: 700px) {
+    .setting-card {
+        padding: 24px;
+    }
+
+    .setting-row {
+        flex-wrap: wrap;
+    }
+
+    /* Full-width label on its own line; the slider and its readout then share
+       the next line, so the readout hugs the right edge instead of centering
+       in a 45px column halfway across. */
+    .setting-label {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    :is(
+        #editor-padding-value,
+        #editor-fontsize-value,
+        #editor-linespacing-value
+    ) {
+        text-align: right;
+    }
+}

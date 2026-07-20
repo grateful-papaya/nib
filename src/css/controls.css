@@ -1,0 +1,206 @@
+/* ====================================================================
+   controls.css — app-wide form controls
+   ====================================================================
+   Renamed from settings-controls.css. The old name was doubly wrong: this
+   file was never settings-specific (its header already noted it only ended
+   up next to the sidebar by accident of when it was written), AND the name
+   collided with the settings modal's own field styles, which now live in
+   settings-fields.css.
+
+   Nothing here reaches into settings.css internals, so these components can
+   be dropped into any panel.
+
+   ────────────────────────────────────────────────────────────────────
+   DUPLICATE RESOLUTION — read before deleting anything
+
+   .setting-toggle-row / -text / -title / -desc were defined TWICE: here and
+   in settings.css, with different values. Whichever sheet loaded last won,
+   silently, which is why the toggle rows in the settings modal and the ones
+   elsewhere never quite matched. They are now defined once, here, using this
+   file's values (the newer authoring). What changed for anything that was
+   previously picking up settings.css's copy:
+
+       .setting-toggle-title  font-size  1rem    → 0.95rem
+       .setting-toggle-desc   font-size  0.85rem → 0.8rem
+       .setting-toggle-desc   line-height 1.4    → 1.5
+       .setting-toggle-desc   color   --st-text-muted → --st-text-soft
+       .setting-toggle-desc   max-width  (none)  → 46ch
+       .setting-toggle-row    width: 100%        → dropped (redundant: a
+                              block-level flex container already fills its
+                              parent, and justify-content:space-between now
+                              does the job margin-left:auto used to do)
+
+   Likewise there are TWO switch implementations below, .nib-switch and the
+   legacy .toggle-switch. See the note above §2.
+   ────────────────────────────────────────────────────────────────────
+
+   Contents:
+     1. Switch (.nib-switch) — current
+     2. Switch (.toggle-switch) — legacy, pending removal
+     3. Toggle row
+   ==================================================================== */
+
+/* ====================================================================
+   1. Switch — current
+   ====================================================================
+   The checkbox is visually hidden but still focusable and still the source
+   of truth; the track and thumb are drawn on the sibling span, driven by
+   :checked. Keeping the real input in the DOM is what preserves keyboard
+   activation, form semantics and screen-reader state for free. */
+.nib-switch {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    width: 38px;
+    height: 22px;
+    cursor: pointer;
+}
+
+.nib-switch input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+.nib-switch-track {
+    position: absolute;
+    inset: 0;
+    background: var(--st-switch-track);
+    border-radius: var(--st-radius-pill);
+    transition: background-color var(--st-dur-accordion) ease;
+}
+
+.nib-switch-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: var(--st-white);
+    border-radius: 50%;
+    box-shadow: var(--st-shadow-knob-strong);
+    /* transform, not `left` — the thumb slides on the compositor and never
+       triggers layout. 16px = 38 - 18 - 2*2 (track width minus thumb minus
+       both insets). */
+    transition: transform var(--st-dur-accordion) var(--st-ease-standard);
+}
+
+.nib-switch input:checked + .nib-switch-track {
+    background: var(--st-accent);
+}
+
+.nib-switch input:checked + .nib-switch-track::after {
+    transform: translateX(16px);
+}
+
+.nib-switch input:focus-visible + .nib-switch-track {
+    outline: 2px solid var(--st-guide);
+    outline-offset: 2px;
+}
+
+/* ====================================================================
+   2. Switch — legacy, pending removal
+   ====================================================================
+   .toggle-switch is the older switch, previously living in settings.css. It
+   is the same control as .nib-switch above with different metrics (44×24 vs
+   38×22) and one real regression: no :focus-visible ring, so it is
+   unreachable-looking under keyboard navigation.
+
+   It is parked here rather than in settings-fields.css so that both switches
+   sit side by side and the migration is a single-file, single-block delete.
+
+   TO REMOVE: grep the markup for `toggle-switch`. Every hit should become
+
+       <label class="nib-switch">
+         <input type="checkbox" …>
+         <span class="nib-switch-track"></span>
+       </label>
+
+   then delete this entire section. Until that grep is done, deleting it
+   would silently unstyle whatever still uses it, so it stays. */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    width: 44px;
+    height: 24px;
+    margin-left: auto;
+}
+
+.toggle-switch input {
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background-color: var(--st-gray-4);
+    border-radius: var(--st-radius-pill);
+    cursor: pointer;
+    transition: background-color var(--st-dur-accordion) ease;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    bottom: 3px;
+    width: 18px;
+    height: 18px;
+    background-color: var(--st-white);
+    border-radius: 50%;
+    box-shadow: var(--st-shadow-knob);
+    transition: transform var(--st-dur-accordion) ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--st-accent);
+}
+
+/* 44px track - 18px thumb - 3px each side = 20px of travel. */
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+/* ====================================================================
+   3. Toggle row
+   ====================================================================
+   Title + description on the left, switch pinned right. Self-contained
+   rather than built on the settings modal's .setting-row/.setting-label, so
+   the title is never squeezed into a narrow wrapping column.
+
+   Works with either switch above: .nib-switch is pushed right by
+   justify-content, .toggle-switch by its own margin-left:auto. */
+.setting-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.setting-toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0; /* let the description wrap instead of pushing the switch */
+}
+
+.setting-toggle-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--st-text);
+}
+
+/* 46ch caps the measure at roughly the point where a line becomes tiring to
+   track back from — the description would otherwise run the full width of a
+   maximized settings modal. */
+.setting-toggle-desc {
+    max-width: 46ch;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--st-text-soft);
+}

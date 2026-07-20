@@ -1,6 +1,29 @@
-/* markdown-preview.css  (linked from src/index.html: <link href="css/markdown-preview.css">) */
+/* ====================================================================
+   markdown-preview.css — the rendered document.
 
-/* ── Headings ─────────────────────────────────────────────────────────────── */
+   Everything here styles CONTENT the user wrote, not application chrome,
+   and consumes the CONTENT half of the token set in base.css (--st-md-*,
+   --st-code-*, --st-tex-*, --st-accent-md). That separation is deliberate:
+   retinting the app must not silently restain someone's prose.
+
+   Two constraints recur throughout and explain most of the odd-looking
+   choices below:
+
+   1. drawSelection samples the computed padding-LEFT of the first rendered
+      .cm-line in the viewport to derive the left edge of every
+      fully-selected-line rectangle. Any per-line padding-left therefore
+      poisons selection geometry for the whole document as soon as that line
+      scrolls to the top. Indents are done with transparent BORDERS or
+      margins instead, which are never sampled. Vertical padding is safe.
+
+   2. Rendered widgets and their raw source must occupy identical height, or
+      the document visibly jumps as the cursor enters and leaves a block.
+      Hence padding rather than margin on block widgets (margin is collapsed
+      out of the height CodeMirror reserves), and shared single-knob values
+      like --cm-math-pad.
+   ==================================================================== */
+
+/* ── Headings ─────────────────────────────────────────────────────────── */
 .cm-md-h1,
 .cm-md-h2,
 .cm-md-h3,
@@ -14,6 +37,7 @@
     /* basicSetup's defaultHighlightStyle underlines headings — force it off */
     text-decoration: none !important;
 }
+
 .cm-md-h1 {
     font-size: 1.85em;
 }
@@ -29,23 +53,24 @@
 .cm-md-h5 {
     font-size: 1.02em;
 }
+
+/* Just under body size — h6 differentiates by weight (700) and the heading
+   line's own spacing, not by a lower-contrast color. An earlier revision
+   grayed it to signal "lowest level", but t.heading6 spans the heading TEXT,
+   not just the "######" mark, so the whole title faded out. Contrast is not a
+   hierarchy tool for real content. */
 .cm-md-h6 {
-    /* Just under body size — h6 differentiates by weight (700) and the
-       heading line's own spacing, not by a lower-contrast color. An earlier
-       revision grayed it to #6b7280 to signal "lowest level", but t.heading6
-       spans the heading TEXT, not just the "######" mark, so the whole title
-       faded out. Contrast is not a hierarchy tool for real content. */
     font-size: 0.95em;
 }
 
-/* ── Heading vertical rhythm ───────────────────────────────────────────────
+/* ── Heading vertical rhythm ───────────────────────────────────────────
    .cm-md-hN is a HighlightStyle *mark* (a <span> inside the line), so vertical
    padding on it does nothing to the line box. The spacing has to land on the
-   .cm-line itself — hence :has(). Only padding-top/bottom is set: padding-LEFT
-   on a .cm-line is the value drawSelection samples for full-line selection
-   rectangles (see the code-line comment below), and must stay untouched.
-   Heading line-height is also pulled in from the body's 1.7 — big type needs
-   proportionally less leading or the heading floats away from its own text. */
+   .cm-line itself — hence :has(). Only padding-top/bottom is set; see
+   constraint 1 at the top of this file for why padding-left is untouchable.
+   Heading line-height is also pulled in from the body's default — big type
+   needs proportionally less leading or the heading floats away from its own
+   text. */
 .cm-line:has(.cm-md-h1),
 .cm-line:has(.cm-md-h2),
 .cm-line:has(.cm-md-h3),
@@ -54,6 +79,7 @@
 .cm-line:has(.cm-md-h6) {
     line-height: 1.35;
 }
+
 /* Pretendard's default tracking is tuned for body sizes; at heading sizes the
    same tracking reads loose. Slight negative tracking on the big three only. */
 .cm-md-h1,
@@ -61,6 +87,7 @@
 .cm-md-h3 {
     letter-spacing: -0.015em;
 }
+
 /* Padding is in em of the *line's* font-size (= the body slider value), so
    the whole rhythm scales when the user drags Font Size. Deliberately
    top-heavy: generous air ABOVE a heading separates it from the previous
@@ -85,6 +112,7 @@
     padding-top: 0.95em;
     padding-bottom: 0.15em;
 }
+
 /* The very first line of the document shouldn't push itself down away from
    the title — .cm-content already pads the top. Scoped to HEADING lines only:
    a blanket :first-child reset would out-specificity the code-block/quote
@@ -101,52 +129,63 @@
     padding-top: 0;
 }
 
-/* ── Inline emphasis ──────────────────────────────────────────────────────── */
+/* ── Inline emphasis ──────────────────────────────────────────────────── */
 /* Structural markdown marks revealed while editing a line: the heading "#",
    blockquote ">", inline-code backticks, … (t.processingInstruction in
-   decorations.js). Neutral gray so they read as syntax, not content — swap
-   the hex here if you want them tinted. */
+   decorations.js). Neutral gray so they read as syntax, not content. */
 .cm-md-mark {
-    color: #9ca3af;
+    color: var(--st-md-mark);
 }
 
 /* 800, not `bold`(=700). Now that the @font-face declares the full 45–920
    wght range (base.css), this resolves to a real Pretendard ExtraBold master
-   rather than a synthesized smear — noticeably heavier against 한글 body copy,
-   where a 400/700 contrast is weaker than it is in Latin because Hangul
+   rather than a synthesized smear — noticeably heavier against Korean body
+   copy, where a 400/700 contrast is weaker than it is in Latin because Hangul
    syllable blocks are already dense. */
 .cm-md-strong {
     font-weight: 800;
 }
+
 /* bold+italic together: keep the weight, don't let the italic branch reset it */
 .cm-md-strong .cm-md-emphasis,
 .cm-md-emphasis .cm-md-strong {
     font-weight: 800;
     font-style: italic;
 }
+
 .cm-md-emphasis {
     font-style: italic;
 }
 
-/* ── Inline code + code block text ────────────────────────────────────────── */
+.cm-md-emph-mark {
+    font-weight: 800;
+    font-style: italic;
+}
+
+.cm-md-strike {
+    text-decoration: line-through;
+}
+
+/* ── Inline code + code block text ────────────────────────────────────── */
 .cm-md-code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    background-color: rgba(135, 131, 120, 0.1);
-    border-radius: 8px;
     padding: 0.1em 0.3em;
+    background-color: var(--st-md-warm-a10);
+    border-radius: var(--st-radius);
+    font-family: var(--st-mono);
     /* Monospace faces run visually large at the same em as Pretendard, so an
        inline `code` span used to bulge out of the sentence. 0.92em evens the
-       apparent size out. Scoped to INLINE code only — the reset below puts
-       fenced-block text back to the line's own size. */
+       apparent size out. Scoped to INLINE code only — the reset further down
+       puts fenced-block text back to the line's own size. */
     font-size: 0.92em;
 }
 
-/* ── Links / image syntax ─────────────────────────────────────────────────── */
+/* ── Links / image syntax ─────────────────────────────────────────────── */
 .cm-md-link {
-    color: #3b82f6;
+    color: var(--st-accent-md);
     text-decoration: underline;
     cursor: pointer;
 }
+
 /* URL-less bracket text ("[0,250]", "[text][ref]") — scanDoc lays this over
    the whole Link node to cancel the highlighter's link styling. Both nesting
    orders covered: CM may merge the two marks into one span or nest either
@@ -155,25 +194,24 @@
 .cm-md-not-link,
 .cm-md-not-link .cm-md-link,
 .cm-md-link .cm-md-not-link {
-    color: #212529 !important;
+    color: var(--st-text) !important;
     text-decoration: none !important;
     cursor: text !important;
 }
 
-/* ── Fenced code block lines ──────────────────────────────────────────────── */
+/* ── Fenced code block lines ──────────────────────────────────────────── */
 .cm-line.cm-md-code-line,
 .cm-line.cm-md-code-first,
 .cm-line.cm-md-code-last {
-    background-color: rgba(135, 131, 120, 0.1);
-    /* The left inset is a transparent border, NOT padding-left. drawSelection
-       samples the computed padding-left of the first rendered .cm-line in the
-       viewport to derive the left edge of every fully-selected-line rectangle;
-       a code line scrolled to the top used to poison that edge (indented
-       selection rects + vanishing highlight while drag-scrolling down).
-       Borders are never sampled, and the default background-clip: border-box
-       paints the fill underneath the transparent border, so it looks
-       identical. 6px is the base .cm-line padding-left, so the text still
-       starts at exactly 1em. */
+    background-color: var(--st-md-warm-a10);
+    /* The left inset is a transparent border, NOT padding-left — see
+       constraint 1 at the top of this file. A code line scrolled to the top
+       used to poison drawSelection's sampled left edge (indented selection
+       rects + vanishing highlight while drag-scrolling down). Borders are
+       never sampled, and the default background-clip: border-box paints the
+       fill underneath the transparent border, so it looks identical. 6px is
+       the base .cm-line padding-left, so the text still starts at exactly
+       1em. */
     border-left: calc(1em - 6px) solid transparent;
     /* The right inset is ALSO a border, for a different reason: end-side
        padding of a scroll container isn't reliably part of the scrollable
@@ -181,10 +219,8 @@
        gap at rest that VANISHED once you panned to the end — the text hit
        the block's right edge flush. A border sits outside the scrollport
        (content clips at the padding box), so the 1em gap holds at every
-       scroll offset, symmetric with the left. background-clip: border-box
-       paints the fill underneath both transparent borders. Right-edge
-       drawSelection sampling is cosmetic-only, so zeroing the padding is
-       safe. */
+       scroll offset, symmetric with the left. Right-edge drawSelection
+       sampling is cosmetic-only, so zeroing the padding is safe. */
     border-right: 1em solid transparent;
     padding-right: 0 !important;
 
@@ -196,12 +232,13 @@
        comes free: CodeMirror's scrollIntoView walks and adjusts every
        scrollable ancestor, which now includes the line itself. Per-line
        native scrollbars are hidden — panning is Shift+wheel / trackpad /
-       caret movement. */
+       caret movement, with .cm-md-hbar-thumb as the visible affordance. */
     white-space: pre !important;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
 }
+
 .cm-line.cm-md-code-line::-webkit-scrollbar,
 .cm-line.cm-md-code-first::-webkit-scrollbar,
 .cm-line.cm-md-code-last::-webkit-scrollbar {
@@ -210,7 +247,7 @@
 
 /* Rendered mode only: slightly roomier side inset (editing mode keeps the
    1em above). Same border-not-padding trick on the left; the value matches
-   the rendered bottom padding (cm-md-code-pad-bottom) so the block reads as
+   the rendered bottom padding (.cm-md-code-pad-bottom) so the block reads as
    an even frame on the left / right / bottom, with only the top taller for
    the language label. */
 .cm-line.cm-md-code-rendered {
@@ -223,159 +260,102 @@
 .cm-editor .cm-scroller {
     overflow-x: hidden;
 }
+
 /* Rounded corners on the visible first/last code line. (position:relative
    kept for safety; the language label now anchors on the fence line.) */
 .cm-md-code-first {
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    padding-top: 0.4em !important;
     position: relative;
+    border-top-left-radius: var(--st-radius-panel);
+    border-top-right-radius: var(--st-radius-panel);
+    padding-top: 0.4em !important;
 }
+
 .cm-md-code-last {
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
+    border-bottom-left-radius: var(--st-radius-panel);
+    border-bottom-right-radius: var(--st-radius-panel);
     padding-bottom: 0.4em !important;
 }
+
 /* Rendered mode only: extra symmetric room so the floating label doesn't
    overlap the code. The top keeps 1.5em for the language label; the bottom
    has nothing to make room for, so it matches the 1.25em side inset. */
 .cm-md-code-pad-top {
     padding-top: 1.5em !important;
 }
+
 .cm-md-code-pad-bottom {
     padding-bottom: 1.25em !important;
 }
+
 /* Keep the code background on the caret's line (activeLine would hide it). */
 .cm-line.cm-md-code-line.cm-activeLine,
 .cm-line.cm-md-code-first.cm-activeLine,
 .cm-line.cm-md-code-last.cm-activeLine {
-    background-color: rgba(135, 131, 120, 0.1) !important;
+    background-color: var(--st-md-warm-a10) !important;
 }
-/* don't double up the pill background on code-block text */
+
+/* Don't double up the pill background on code-block text. */
 .cm-md-code-line .cm-md-code,
 .cm-md-code-first .cm-md-code,
 .cm-md-code-last .cm-md-code {
-    background: none;
     padding: 0;
+    background: none;
     border-radius: 0;
-    /* undo the inline-code shrink: a fenced block's geometry (the em-based
-       border insets above) assumes the line's own font-size */
+    /* Undo the inline-code shrink: a fenced block's geometry (the em-based
+       border insets above) assumes the line's own font-size. */
     font-size: inherit;
 }
 
-/* ── Blockquote lines ─────────────────────────────────────────────────────── */
-/* Vertical bars drawn per-line via inline background gradients; the text
-   indent is an inline transparent border-left (not padding-left — see the
-   code-line comment on drawSelection sampling) with background-origin/clip:
-   border-box so the bars stay anchored at the line's true left edge. Fill +
-   rounded top/bottom corners via the first/last classes; color matched to the
-   code block. */
-.cm-line.cm-md-quote {
-    --quote-bar: rgba(135, 131, 120, 0.5);
-    color: #6b7280;
-    background-color: rgba(135, 131, 120, 0.1);
-    padding-right: 1em;
-}
-.cm-line.cm-md-quote-first {
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    padding-top: 0.3em; /* keep text off the rounded corner */
-}
-.cm-line.cm-md-quote-last {
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
-    padding-bottom: 0.3em;
-}
-.cm-line.cm-md-quote.cm-activeLine {
-    background-color: rgba(135, 131, 120, 0.1) !important;
-}
-
-/* ── Horizontal rule (drawn with an absolute ::after — no layout impact) ───── */
-.cm-md-hr {
-    position: relative;
-    /* a thematic break should feel like one — give the rule some air.
-       Vertical padding on a .cm-line is safe; only padding-LEFT is the
-       drawSelection sampling hazard. */
-    padding-top: 0.8em;
-    padding-bottom: 0.8em;
-}
-.cm-md-hr::after {
-    content: "";
-    position: absolute;
-    left: 4px;
-    right: 4px;
-    top: 50%;
-    height: 1px;
-    background-color: rgba(128, 128, 128, 0.4);
-    transform: translateY(-50%);
-}
-
-.cm-md-emph-mark {
-    font-weight: 800;
-    font-style: italic;
-}
-
-.cm-line.cm-md-list-line {
-    /* margin-left, NOT padding-left: per-line padding-left poisons the left
-       edge drawSelection samples from the viewport's first rendered line (see
-       the code-line comment above). margin is never sampled. 6px = base
-       .cm-line padding-left, so the text lands at the same 1.5em as before.
-       Bonus: the old !important padding overrode a blockquote's inline
-       padding, so a list inside a quote LOST the quote indent — margin
-       composes with the quote's border-left, so it now indents correctly. */
-    margin-left: calc(1.5em - 6px);
-}
-
-/* ── List marker widget (bullets + computed ordered numbers) ───────────────
-   Renders the literal marker's replacement; inline-block so it sizes to its own
-   text (a hierarchical "1.2.5" takes exactly its own width). */
-.cm-md-marker {
-    display: inline-block;
-}
-/* ── Code-block language label (click to copy) ────────────────────────────── */
+/* ── Code-block language label (click to copy) ────────────────────────── */
 .cm-md-code-lang {
     position: absolute;
     top: 6px;
     right: 8px;
-    z-index: 2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    line-height: 1;
+    padding: 3px 9px;
+    background: var(--st-md-warm-a18);
+    border: none;
+    border-radius: var(--st-radius-md);
+    color: var(--st-md-lang-ink);
     /* rem, not em: the label now lives on the fence line, whose font-size is
        forced to 0 to collapse its height — 0.7em would compute to 0 there. */
     font-size: 0.7rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    color: #4b5563;
-    background: rgba(135, 131, 120, 0.18);
-    border: none;
-    border-radius: 6px;
-    padding: 3px 9px;
+    font-family: var(--st-mono);
+    line-height: 1;
     cursor: pointer;
     user-select: none;
+    z-index: var(--st-z-md-label);
     transition:
-        background 0.15s ease,
-        color 0.15s ease;
+        background var(--st-dur-quick) ease,
+        color var(--st-dur-quick) ease;
 }
+
 .cm-md-code-lang:hover {
-    background: rgba(135, 131, 120, 0.32);
-    color: #1f2937;
+    background: var(--st-md-warm-a32);
+    color: var(--st-md-lang-ink-hover);
 }
+
 /* Per-language coloring. --lang-hue is set by LangLabelWidget (widgets.js):
    canonical hues for common languages, a stable hash hue for the rest. The
-   bare "copy" label has no [data-lang], so it keeps the gray pill above. */
+   bare "copy" label has no [data-lang], so it keeps the gray pill above.
+   Generated in HSL rather than tokenized because the hue is a runtime value —
+   only the saturation/lightness curve is a design decision, and it lives
+   here where both states can be read together. */
 .cm-md-code-lang[data-lang] {
     color: hsl(var(--lang-hue) 70% 30%);
     background: hsl(var(--lang-hue) 85% 45% / 0.14);
 }
+
 .cm-md-code-lang[data-lang]:hover {
     color: hsl(var(--lang-hue) 75% 24%);
     background: hsl(var(--lang-hue) 85% 45% / 0.26);
 }
 
-/* Collapse the hidden ``` fence lines in rendered mode. Use font-size:0 +
-   line-height:0 to remove height without overflow:hidden (which would clip the
-   language-label widget that sits just above the first fence line). */
+/* Collapse the hidden ``` fence lines in rendered mode. font-size:0 +
+   line-height:0 removes the height without overflow:hidden, which would clip
+   the language-label widget sitting just above the first fence line. */
 .cm-line.cm-md-fence-line {
     font-size: 0 !important;
     line-height: 0 !important;
@@ -393,7 +373,76 @@
     background: none !important;
 }
 
-/* ── Arrow / operator glyphs (-> → , != → ≠, etc.) ─────────────────────────── */
+/* ── Blockquote lines ─────────────────────────────────────────────────── */
+/* Vertical bars are drawn per-line via inline background gradients written
+   from JS, which read --quote-bar below; the text indent is an inline
+   transparent border-left (constraint 1 again) with background-origin/clip:
+   border-box so the bars stay anchored at the line's true left edge. Fill +
+   rounded top/bottom corners via the first/last classes; fill color matched
+   to the code block so the two block types read as one family. */
+.cm-line.cm-md-quote {
+    --quote-bar: var(--st-md-warm-a50);
+    padding-right: 1em;
+    background-color: var(--st-md-warm-a10);
+    color: var(--st-md-quote-ink);
+}
+
+.cm-line.cm-md-quote-first {
+    border-top-left-radius: var(--st-radius-panel);
+    border-top-right-radius: var(--st-radius-panel);
+    padding-top: 0.3em; /* keep text off the rounded corner */
+}
+
+.cm-line.cm-md-quote-last {
+    border-bottom-left-radius: var(--st-radius-panel);
+    border-bottom-right-radius: var(--st-radius-panel);
+    padding-bottom: 0.3em;
+}
+
+.cm-line.cm-md-quote.cm-activeLine {
+    background-color: var(--st-md-warm-a10) !important;
+}
+
+/* ── Horizontal rule (drawn with an absolute ::after — no layout impact) ── */
+.cm-md-hr {
+    position: relative;
+    /* A thematic break should feel like one — give the rule some air.
+       Vertical padding on a .cm-line is safe; only padding-LEFT is the
+       drawSelection sampling hazard. */
+    padding-top: 0.8em;
+    padding-bottom: 0.8em;
+}
+
+.cm-md-hr::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    top: 50%;
+    height: 1px;
+    background-color: var(--st-md-rule-a40);
+    transform: translateY(-50%);
+}
+
+/* ── Lists ────────────────────────────────────────────────────────────── */
+.cm-line.cm-md-list-line {
+    /* margin-left, NOT padding-left: per-line padding-left poisons the left
+       edge drawSelection samples (constraint 1). margin is never sampled.
+       6px = base .cm-line padding-left, so the text lands at the same 1.5em
+       as before. Bonus: the old !important padding overrode a blockquote's
+       inline padding, so a list inside a quote LOST the quote indent — margin
+       composes with the quote's border-left, so it now indents correctly. */
+    margin-left: calc(1.5em - 6px);
+}
+
+/* List marker widget (bullets + computed ordered numbers). Renders the
+   literal marker's replacement; inline-block so it sizes to its own text (a
+   hierarchical "1.2.5" takes exactly its own width). */
+.cm-md-marker {
+    display: inline-block;
+}
+
+/* ── Arrow / operator glyphs (-> → , != → ≠, etc.) ────────────────────── */
 .cm-md-glyph {
     font-variant-ligatures: none;
 }
@@ -404,8 +453,10 @@
         "liga" 0,
         "calt" 0;
 }
-/* ── Task-list checkbox ─────────────────────────────────────────────────── */
+
+/* ── Task-list checkbox ───────────────────────────────────────────────── */
 .cm-md-checkbox {
+    position: relative;
     box-sizing: border-box;
     appearance: none;
     -webkit-appearance: none;
@@ -413,22 +464,26 @@
     height: 1.2em;
     margin: 0 0.45em 0 0;
     vertical-align: -0.12em;
-    border: 1.5px solid rgba(128, 128, 128, 0.6);
-    border-radius: 4px;
     background: transparent;
+    border: 1.5px solid var(--st-md-rule-a60);
+    border-radius: var(--st-radius-4);
     cursor: pointer;
-    position: relative;
     transition:
-        background 0.12s ease,
-        border-color 0.12s ease;
+        background var(--st-dur-fast) ease,
+        border-color var(--st-dur-fast) ease;
 }
+
 .cm-md-checkbox:hover {
-    border-color: #3b82f6;
+    border-color: var(--st-accent-md);
 }
+
 .cm-md-checkbox:checked {
-    background: #3b82f6;
-    border-color: #3b82f6;
+    background: var(--st-accent-md);
+    border-color: var(--st-accent-md);
 }
+
+/* The tick is a rotated two-sided border box, not a glyph — it scales with
+   the em-sized checkbox instead of depending on a font. */
 .cm-md-checkbox:checked::after {
     content: "";
     position: absolute;
@@ -436,11 +491,12 @@
     top: 0.1em;
     width: 0.22em;
     height: 0.48em;
-    border: solid #fff;
+    border: solid var(--st-white);
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
 }
-/* ── Inline image preview (resizable) ─────────────────────────────────────── */
+
+/* ── Inline image preview (resizable) ─────────────────────────────────── */
 .cm-md-image-box {
     position: relative;
     display: block;
@@ -448,12 +504,15 @@
     max-width: 100%;
     margin: 2px 0;
     line-height: 0;
+    /* outline, not border: it paints outside the box, so it neither covers
+       the image nor shifts layout when it appears on hover. */
     outline: 1.5px solid transparent;
-    transition: outline-color 0.12s ease;
+    transition: outline-color var(--st-dur-fast) ease;
 }
+
 .cm-md-image {
     display: block;
-    height: auto; /* 가로폭만 조절 → 비율 자동 유지 */
+    height: auto; /* width-only resizing keeps the aspect ratio automatic */
     max-width: 100%;
     /* Hit-testing fix: <img> is a replaced element and draggable by default;
        during a mouse selection the browser's caret-from-point APIs hitting
@@ -468,90 +527,111 @@
     pointer-events: none;
     -webkit-user-drag: none;
 }
-/* Hover: 이미지 바깥을 연한 브랜드 블루로 감싸는 액자 테두리.
-   outline은 콘텐츠 위에 안 그려지고 레이아웃도 안 밀어서 이미지를 안 가림. */
+
+/* Hover: a soft frame in the content blue, wrapped around the outside of the
+   image. */
 .cm-md-image-box:hover {
-    outline-color: rgba(59, 130, 246, 0.45);
+    outline-color: var(--st-accent-md-a45);
 }
 
-/* 네 모서리 브래킷 (두 변만, 진한 브랜드 블루) — 이미지 '바깥'에 배치 */
+/* Four corner brackets — two edges each, placed OUTSIDE the image so they
+   never cover its content. */
 .cm-md-image-resize {
     position: absolute;
     width: 12px;
     height: 12px;
     box-sizing: border-box;
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity var(--st-dur-fast) ease;
 }
+
 .cm-md-image-box:hover .cm-md-image-resize {
     opacity: 1;
 }
+
 .cm-md-image-resize-nw {
     top: -2px;
     left: -2px;
+    border-top: 2px solid var(--st-accent-md);
+    border-left: 2px solid var(--st-accent-md);
     cursor: nwse-resize;
-    border-top: 2px solid #3b82f6;
-    border-left: 2px solid #3b82f6;
 }
+
 .cm-md-image-resize-ne {
     top: -2px;
     right: -2px;
+    border-top: 2px solid var(--st-accent-md);
+    border-right: 2px solid var(--st-accent-md);
     cursor: nesw-resize;
-    border-top: 2px solid #3b82f6;
-    border-right: 2px solid #3b82f6;
 }
+
 .cm-md-image-resize-sw {
     bottom: -2px;
     left: -2px;
+    border-bottom: 2px solid var(--st-accent-md);
+    border-left: 2px solid var(--st-accent-md);
     cursor: nesw-resize;
-    border-bottom: 2px solid #3b82f6;
-    border-left: 2px solid #3b82f6;
 }
+
 .cm-md-image-resize-se {
     bottom: -2px;
     right: -2px;
+    border-bottom: 2px solid var(--st-accent-md);
+    border-right: 2px solid var(--st-accent-md);
     cursor: nwse-resize;
-    border-bottom: 2px solid #3b82f6;
-    border-right: 2px solid #3b82f6;
 }
-/* ── GFM table (live preview widget) ─────────────────────────────────────── */
+
+/* ── GFM table (live preview widget) ──────────────────────────────────── */
+/* Bottom padding is 28px rather than the 14px the other sides use, because a
+   dedicated layer sits under the add-row bar for the floating horizontal
+   scroll thumb (markdown-table.js measureBar places it at bottom + 23). Read
+   downward, the stack below the table is:
+       [ +row bar 13px | 4px gap | thumb 4px | 5px gap | next content ]
+   Top padding is the column gutter; the right padding is the add-column bar;
+   left is 0 so the table is not indented relative to body text. */
 .cm-md-table-wrap {
     position: relative;
     width: fit-content;
     max-width: 100%;
-    /* 하단 14px → 28px: +행 바(13px) 아래에 플로팅 가로 스크롤 썸이 들어갈
-       전용 층이 생겼다 (markdown-table.js measureBar가 bottom+23에 배치).
-       표 아래로 [+행 바 | 4px 여백 | 썸 4px | 5px 여백 | 다음 내용] 순서. */
-    padding: 16px 14px 28px 0; /* 상: 열 거터 / 우: + 바. 왼쪽 0 = 들여쓰기 없음 */
     margin: 2px 0;
+    padding: 16px 14px 28px 0;
 }
-/* 표가 에디터 폭보다 넓어지면 이 래퍼 안에서만 가로 스크롤. 네이티브
-   스크롤바는 숨기고(코드블록과 동일) 플로팅 썸(.cm-md-hbar-thumb)이
-   대신한다. 거터/핸들/+바는 .cm-md-table-wrap의 자식으로 남아 있어
-   스크롤과 무관하게 보이는 영역 기준으로 동작한다 — 위치 계산이 전부
-   getBoundingClientRect 기반이라 스크롤 오프셋이 저절로 반영됨. */
+
+/* A table wider than the editor pans inside this wrapper only. Native
+   scrollbars are hidden (same as code blocks) and .cm-md-hbar-thumb stands in
+   for them. The gutters, handles and add-bars stay children of
+   .cm-md-table-wrap rather than of this scroller, so they keep working
+   against the VISIBLE region regardless of scroll offset — every position
+   calculation is getBoundingClientRect-based, which already accounts for it. */
 .cm-md-table-scroll {
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
 }
+
 .cm-md-table-scroll::-webkit-scrollbar {
     display: none;
 }
+
 .cm-md-table {
-    border-collapse: separate; /* collapse는 border-radius가 안 먹어서 separate */
+    /* separate, not collapse: border-radius has no effect under
+       border-collapse, and the table needs rounded outer corners. The cost is
+       that inner borders must be drawn per-cell and de-duplicated at the
+       edges, which the two rules after the next one do. */
+    border-collapse: separate;
     border-spacing: 0;
-    border: 1px solid rgba(128, 128, 128, 0.35);
-    border-radius: 6px;
+    border: 1px solid var(--st-md-rule-a35);
+    border-radius: var(--st-radius-md);
     font-size: inherit;
 }
+
 .cm-md-table th,
 .cm-md-table td {
-    border-right: 1px solid rgba(128, 128, 128, 0.35);
-    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
-    padding: 3px 10px; /* was 4px 12px — a touch denser */
     min-width: 3em;
+    padding: 3px 10px;
+    border-right: 1px solid var(--st-md-rule-a35);
+    border-bottom: 1px solid var(--st-md-rule-a35);
     outline: none;
     /* `pre`, not `pre-wrap`: cells never soft-wrap, so a row is always one
        text line unless the user breaks it EXPLICITLY — Shift+Enter inserts a
@@ -562,75 +642,93 @@
        .cm-md-table-scroll with the floating hbar thumb. */
     white-space: pre;
 }
+
+/* The outer border already draws these edges — drop the duplicates. */
 .cm-md-table th:last-child,
 .cm-md-table td:last-child {
-    border-right: none; /* 바깥 테두리가 이미 그려주므로 마지막 열은 중복 제거 */
-}
-.cm-md-table tbody tr:last-child td {
-    border-bottom: none; /* 마지막 행도 동일 */
-}
-.cm-md-table th {
-    background: rgba(135, 131, 120, 0.08);
-    font-weight: 700;
-}
-/* 헤더/코너 라운드 */
-.cm-md-table thead th:first-child {
-    border-top-left-radius: 6px;
-}
-.cm-md-table thead th:last-child {
-    border-top-right-radius: 6px;
-}
-.cm-md-table tbody tr:last-child td:first-child {
-    border-bottom-left-radius: 6px;
-}
-.cm-md-table tbody tr:last-child td:last-child {
-    border-bottom-right-radius: 6px;
+    border-right: none;
 }
 
-/* 편집 중 셀 */
+.cm-md-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.cm-md-table th {
+    background: var(--st-md-warm-a08);
+    font-weight: 700;
+}
+
+/* Corner cells have to repeat the wrapper's radius themselves: with
+   border-collapse:separate the table's own border-radius does not clip its
+   children. */
+.cm-md-table thead th:first-child {
+    border-top-left-radius: var(--st-radius-md);
+}
+.cm-md-table thead th:last-child {
+    border-top-right-radius: var(--st-radius-md);
+}
+.cm-md-table tbody tr:last-child td:first-child {
+    border-bottom-left-radius: var(--st-radius-md);
+}
+.cm-md-table tbody tr:last-child td:last-child {
+    border-bottom-right-radius: var(--st-radius-md);
+}
+
+/* Cell currently being edited. */
 .cm-md-table .cm-md-cell-editing {
-    outline: 1.5px solid rgba(59, 130, 246, 0.55);
+    outline: 1.5px solid var(--st-accent-md-a55);
     outline-offset: -1.5px;
 }
-/* 엑셀식 사각형 선택 하이라이트 */
+
+/* Spreadsheet-style rectangular selection. */
 .cm-md-table .cm-md-sel {
-    background: rgba(59, 130, 246, 0.14) !important;
+    background: var(--st-accent-md-a14) !important;
 }
-/* 선택 드래그 중 네이티브 텍스트 선택 억제 */
+
+/* Suppress native text selection while drag-selecting cells. */
 .cm-md-table-selecting,
 .cm-md-table-selecting * {
     user-select: none;
 }
-/* 드래그 중 대상 행/열 하이라이트 */
+
+/* Target row/column highlight during a reorder drag. */
 .cm-md-table-drop {
-    background: rgba(59, 130, 246, 0.12) !important;
+    background: var(--st-accent-md-a12) !important;
 }
+
 .cm-md-table-dragging {
     cursor: grabbing;
 }
-/* 셀 내부 인라인 요소 */
+
+/* Inline code inside a cell. */
 .cm-md-table td code,
 .cm-md-table th code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    background-color: rgba(135, 131, 120, 0.1);
-    border-radius: 6px;
     padding: 0.1em 0.3em;
+    background-color: var(--st-md-warm-a10);
+    border-radius: var(--st-radius-md);
+    font-family: var(--st-mono);
 }
+
 .cm-md-table-link {
-    color: #3b82f6;
+    color: var(--st-accent-md);
     text-decoration: underline;
 }
-/* 거터 스트립: 표 위(열)·왼쪽(행)의 투명한 hover 영역. 여기 마우스를 올려야만
-   핸들이 나타난다 — 표 본문 hover로는 아무것도 안 뜸 */
+
+/* Gutter strips: transparent hover zones above (columns) and to the left
+   (rows) of the table. Handles appear only while the pointer is in a gutter —
+   hovering the table body itself shows nothing, so the table stays quiet
+   while you are reading it. */
 .cm-md-table-gutter {
     position: absolute;
 }
+
 .cm-md-table-gutter-top {
     top: 0;
     left: 0;
     right: 14px;
     height: 16px;
 }
+
 .cm-md-table-gutter-left {
     left: -18px;
     width: 18px;
@@ -638,125 +736,149 @@
     bottom: 28px; /* = wrap bottom padding: stop at the table's bottom border */
 }
 
-/* 핸들 (거터 hover 시에만 표시) — 버튼형 테두리 + 유니코드 점 글리프 */
+/* Handles (shown on gutter hover) — a button-ish pill plus a Unicode dot
+   glyph. */
 .cm-md-table-handle {
     position: absolute;
-    box-sizing: border-box;
     display: inline-block;
-    color: #9ca3af;
-    background: rgba(135, 131, 120, 0.15);
-    border-radius: 5px;
+    box-sizing: border-box;
+    background: var(--st-md-warm-a15);
+    border-radius: var(--st-radius-sm);
+    color: var(--st-md-mark);
     line-height: 1;
     user-select: none;
     cursor: grab;
     opacity: 0;
+    z-index: var(--st-z-md-handle);
     transition:
-        opacity 0.12s ease,
-        border-color 0.12s ease,
-        color 0.12s ease;
-    z-index: 5;
+        opacity var(--st-dur-fast) ease,
+        border-color var(--st-dur-fast) ease,
+        color var(--st-dur-fast) ease;
 }
-/* hover 시: 각 거터는 자기 축 핸들만 보여줌 */
+
+/* Each gutter reveals only the handles on its own axis. */
 .cm-md-table-gutter-top:hover .cm-md-table-colhandle,
 .cm-md-table-gutter-left:hover .cm-md-table-rowhandle {
     opacity: 1;
 }
-/* 드래그 중: 그 축 핸들만 계속 보이게 (반대축 핸들 숨김) */
+
+/* During a drag, keep that axis's handles visible and the other axis hidden. */
 .cm-md-table-dragging-col .cm-md-table-colhandle,
 .cm-md-table-dragging-row .cm-md-table-rowhandle {
     opacity: 1;
 }
+
 .cm-md-table-handle:hover {
-    background: rgba(59, 130, 246, 0.2);
-    color: #3b82f6;
-}
-/* 열 핸들: 가로로 넓은 3×2 (가로 3점 · 세로 2점) */
-.cm-md-table-colhandle {
-    top: 1px;
-    transform: translateX(-50%);
-    padding: 1px 9px; /* 세로 padding 3px → 1px (가로는 유지) */
-    font-size: 13px;
-    line-height: 0.6; /* ⋯ 세로 높이 축소 — 행 핸들과 두께 대칭 */
-}
-.cm-md-table-rowhandle {
-    left: 1px;
-    transform: translateY(-50%);
-    padding: 7px 4px;
-    font-size: 13px;
-    line-height: 0.6; /* ⋮ 세로 점이 촘촘히 붙게 */
+    background: var(--st-accent-md-a20);
+    color: var(--st-accent-md);
 }
 
-/* 우측/하단 + 바 — 그 엣지에 직접 마우스를 대야만 나타남 */
+/* Column handle: wide and short (3 dots across, 2 down). The tight
+   line-height is what compresses the glyph vertically so the two handles read
+   as the same thickness despite different glyphs. */
+.cm-md-table-colhandle {
+    top: 1px;
+    padding: 1px 9px;
+    transform: translateX(-50%);
+    font-size: 13px;
+    line-height: 0.6;
+}
+
+/* Row handle: tall and narrow, the same treatment rotated. */
+.cm-md-table-rowhandle {
+    left: 1px;
+    padding: 7px 4px;
+    transform: translateY(-50%);
+    font-size: 13px;
+    line-height: 0.6;
+}
+
+/* Add-column / add-row bars — revealed only when the pointer is on that exact
+   edge, so they never compete with the handles. */
 .cm-md-table-addbar {
     position: absolute;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.12);
-    border-radius: 4px;
+    background: var(--st-accent-md-a12);
+    border-radius: var(--st-radius-4);
+    color: var(--st-accent-md);
     font-size: 13px;
     line-height: 1;
     cursor: pointer;
     user-select: none;
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity var(--st-dur-fast) ease;
 }
+
 .cm-md-table-addbar:hover {
     opacity: 1;
 }
+
 .cm-md-table-addcol {
     top: 16px;
     bottom: 28px; /* = wrap bottom padding: stop at the table's bottom border */
     right: 2px;
     width: 13px;
 }
+
 .cm-md-table-addrow {
     left: 0;
     right: 14px;
-    bottom: 13px; /* table_bottom+2 — same visual slot as before; the extra
-                     wrap padding below it belongs to the scrollbar thumb */
+    /* table_bottom + 2 — the extra wrap padding below this belongs to the
+       scrollbar thumb's layer. */
+    bottom: 13px;
     height: 13px;
 }
 
-/* 테이블 컨텍스트 메뉴: 디자인은 앱의 .context-menu를 그대로 상속.
-   위치/표시만 여기서 잡아줌 (앱 메뉴가 기본 hidden이어도 뜨도록) */
+/* Table context menu: inherits the app's .context-menu appearance wholesale
+   (overlays.css); only placement and forced display are set here, so it still
+   appears even though the app menu defaults to hidden. */
 .cm-md-table-menu {
     display: block !important;
     position: absolute;
-    z-index: 10;
+    z-index: var(--st-z-md-table-menu);
 }
-/* 하위 메뉴가 있는 항목: 라벨 왼쪽 정렬 + 오른쪽 끝에 › 화살표 */
+
+/* Rows with a submenu: label left, › arrow hard right. */
 .cm-md-table-menu .context-menu-item.has-submenu {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
+
 .cm-md-table-menu-arrow {
     margin-left: 12px;
     opacity: 0.5;
     font-size: 1.1em;
     line-height: 1;
 }
-/* 테이블 메뉴만 폭·패딩 축소 (사이드바 .context-menu는 그대로) */
+
+/* Only the table menu is narrowed; the sidebar's .context-menu keeps its own
+   min-width. */
 .cm-md-table-menu.context-menu {
     min-width: 0;
     width: max-content;
 }
+
 .cm-md-table-menu .context-menu-item {
     padding-top: 5px;
     padding-bottom: 5px;
     padding-right: 14px;
 }
-.cm-md-strike {
-    text-decoration: line-through;
-}
-/* ── Math (KaTeX) ─────────────────────────────────────────────────────────── */
 
-/* 블록 수식 상하 여백 단일 노브. 렌더 위젯과 raw($$…$$) 소스 줄이 같은 값을
-   써서 두 상태의 높이가 정확히 일치한다. 여백을 늘리고 싶으면 이 값만 만지면 됨. */
+/* ── Math (KaTeX) ─────────────────────────────────────────────────────── */
+
+/* Single knob for block-math vertical spacing. The rendered widget and the
+   raw ($$…$$) source lines both read it, so the two states are exactly the
+   same height (constraint 2). To give block math more air, change only this. */
 .cm-content {
     --cm-math-pad: 1em;
+    /* Base ink for revealed math. cm-tex-body spans the whole content between
+       the $'s (texTokenMarks); token marks nest inside it, so their palette
+       wins on \commands, braces, operators and numbers — this only colors
+       what nothing else claims (variable letters, punctuation). */
+    --md-syntax: var(--st-md-tex-ink);
 }
 
 /* KaTeX ships `.katex { font-size: 1.21em }` — a sane default for a page whose
@@ -764,32 +886,25 @@
    x-height for the same em) it makes every inline $I_C$ tower over the
    sentence and inflate the line box irregularly. Two selectors' specificity
    (0,2,0) beats katex.min.css's (0,1,0) without !important.
-   Inline is pulled slightly UNDER body size (0.95em) so subscript-heavy
-   tokens like V_CE sit inside the sentence instead of on top of it; display
-   math keeps only a whisper of a bump. Everything is em-relative, so both
-   track the Font Size slider. */
-/* KaTeX also needs its own leading: it lays out with vlists whose height it
-   computes itself, so inheriting the document's 1.7 stretches the internals of
-   an inline fraction. (Struts are load-bearing for baseline alignment — never
-   hide them.) */
+
+   Inline is pulled slightly UNDER body size so subscript-heavy tokens like
+   V_CE sit inside the sentence instead of on top of it; display math keeps
+   only a whisper of a bump. Everything is em-relative, so both track the Font
+   Size slider.
+
+   KaTeX also needs its own leading: it lays out with vlists whose height it
+   computes itself, so inheriting the document's body line-height stretches
+   the internals of an inline fraction. (Struts are load-bearing for baseline
+   alignment — never hide them.) */
 .cm-content .katex {
     font-size: 0.95em;
     line-height: 1.2;
 }
 
-/* ── Revealed math ink ─────────────────────────────────────────────────────
-   Markdown marks stay on their quiet grays; the ONE place raw source gets
-   tinted is inside revealed math. cm-tex-body spans the whole content
-   between the $'s (texTokenMarks); token marks nest inside it, so their
-   palette wins on \commands, braces, operators, and numbers — this base
-   only colors what nothing else claims (variable letters, punctuation).
-   #1e40af: deep, unflashy, clearly "formula" against black prose. */
-.cm-content {
-    --md-syntax: #1e40af;
-}
 .cm-tex-body {
     color: var(--md-syntax);
 }
+
 .cm-md-math-display .katex,
 .cm-md-math-display .katex-display {
     font-size: 1.02em;
@@ -797,28 +912,34 @@
 
 .cm-md-math-display {
     text-align: center;
-    /* margin이 아니라 padding: block widget의 margin은 CodeMirror가 예약하는
-       높이에서 빠지고 이웃 줄과 collapse돼 렌더가 raw보다 짧아졌다.
-       padding은 높이에 포함되므로 두 상태가 같아진다. */
+    /* padding, not margin: a block widget's margin is excluded from the height
+       CodeMirror reserves AND collapses with neighbouring lines, so the
+       rendered form came out shorter than the raw source. padding counts
+       toward the height, so the two states match (constraint 2). */
     padding: var(--cm-math-pad) 0;
     overflow-x: auto;
 }
+
 .cm-md-math-display .katex-display {
     margin: 0;
 }
 
-/* raw($$…$$) 소스 — 커서가 블록 안에 있을 때 노출 */
+/* Raw ($$…$$) source, revealed when the cursor is inside the block. */
 .cm-line.cm-md-math-source {
     text-align: center;
 }
+
 .cm-line.cm-md-math-source-first {
     padding-top: var(--cm-math-pad);
 }
+
 .cm-line.cm-md-math-source-last {
     padding-bottom: var(--cm-math-pad);
 }
-/* 한 줄짜리 $$…$$ 블록은 렌더 높이를 min-height(JS에서 설정)로 예약한다.
-   그 예약된 박스 안에서 텍스트를 위로 붙이지 말고 정중앙에 둔다. */
+
+/* A single-line $$…$$ block reserves the rendered height via min-height (set
+   from JS). Center the source text inside that reserved box rather than
+   letting it sit at the top. */
 .cm-line.cm-md-math-source-first.cm-md-math-source-last {
     display: flex;
     align-items: center;
@@ -826,66 +947,108 @@
 }
 
 .cm-md-math-error {
-    color: #ef4444;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--st-md-error);
+    font-family: var(--st-mono);
 }
 
-/* ── Code-block token colors (nested language highlighting) ───────────────── */
+/* ── Code-block token colors (nested language highlighting) ───────────── */
 /* Class names come from mdHighlight in markdown/decorations.js; active when
    the markdown parser is configured with codeLanguages (i.e. the vendored
-   bundle exports `languages` from @codemirror/language-data). Vivid
-   editor-style palette tuned for the app's light surfaces — every hue kept
-   dark enough for AA contrast on the code block's gray fill. */
-.cm-code-keyword { color: #9c36b5; }                       /* vivid purple  */
-.cm-code-string { color: #2b8a3e; }                        /* green         */
-.cm-code-comment { color: #94989f; font-style: italic; }   /* soft gray     */
-.cm-code-number { color: #e8590c; }                        /* orange        */
-.cm-code-function { color: #1c6ef2; }                      /* bright blue   */
-.cm-code-type { color: #0c8599; }                          /* teal          */
-.cm-code-property { color: #0b7285; }                      /* cyan          */
-.cm-code-operator { color: #c2255c; }                      /* pink-red      */
-.cm-code-regexp { color: #099268; }                        /* sea green     */
-.cm-code-meta { color: #7048e8; }                          /* violet        */
-.cm-code-def { color: #1971c2; }                           /* def'd names   */
-.cm-code-tag { color: #e03131; }                           /* HTML/JSX tags */
+   bundle exports `languages` from @codemirror/language-data). The palette
+   itself is in base.css. */
+.cm-code-keyword {
+    color: var(--st-code-keyword);
+}
+.cm-code-string {
+    color: var(--st-code-string);
+}
+.cm-code-comment {
+    color: var(--st-code-comment);
+    font-style: italic;
+}
+.cm-code-number {
+    color: var(--st-code-number);
+}
+.cm-code-function {
+    color: var(--st-code-function);
+}
+.cm-code-type {
+    color: var(--st-code-type);
+}
+.cm-code-property {
+    color: var(--st-code-property);
+}
+.cm-code-operator {
+    color: var(--st-code-operator);
+}
+.cm-code-regexp {
+    color: var(--st-code-regexp);
+}
+.cm-code-meta {
+    color: var(--st-code-meta);
+}
+.cm-code-def {
+    color: var(--st-code-def);
+}
+.cm-code-tag {
+    color: var(--st-code-tag);
+}
 
-/* ── LaTeX source tokens (revealed $…$ / $$…$$ while editing) ─────────────── */
-.cm-tex-delim { color: #8b949e; }
-.cm-tex-cmd { color: #6f42c1; }
-.cm-tex-brace { color: #6a737d; }
-.cm-tex-op { color: #e36209; }
-.cm-tex-comment { color: #6a737d; font-style: italic; }
-.cm-tex-num { color: #005cc5; }
+/* ── LaTeX source tokens (revealed $…$ / $$…$$ while editing) ─────────── */
+.cm-tex-delim {
+    color: var(--st-tex-delim);
+}
+.cm-tex-cmd {
+    color: var(--st-tex-cmd);
+}
+.cm-tex-brace {
+    color: var(--st-tex-brace);
+}
+.cm-tex-op {
+    color: var(--st-tex-op);
+}
+.cm-tex-comment {
+    color: var(--st-tex-comment);
+    font-style: italic;
+}
+.cm-tex-num {
+    color: var(--st-tex-num);
+}
 
-/* ── Floating horizontal scrollbar thumb (code blocks · tables) ───────────── */
+/* ── Floating horizontal scrollbar thumb (code blocks · tables) ───────── */
 /* Created by js/markdown/hscrollbar.js. position:absolute INSIDE .cm-scroller
    (which is position:relative), in scroller-content coordinates — so it rides
    vertical scrolling for free, is clipped by the editor for free, and stays
-   under any overlay that covers the editor. left/top/width/height는 JS가 직접
-   쓴다 (px 절대값, 매 프레임). top과 height는 반드시 같은 duration/easing으로
-   함께 트랜지션해야 한다: 바닥 고정 확장은 top = y - height라서, 트랜지션이
-   하나라도 어긋나면(과거엔 height만 애니메이션, top은 즉시) 바닥이 순간이동
-   후 뒤늦게 따라오는 것처럼 보인다. 같이 걸면 브라우저가 매 중간 프레임마다
-   두 값을 동시에 보간하므로 바닥이 시각적으로 고정된 채 위로 부드럽게 자란다. */
+   under any overlay that covers the editor. left/top/width/height are written
+   directly from JS as absolute px, every frame.
+
+   `top` and `height` MUST transition with the same duration and easing.
+   Bottom-anchored growth means top = y - height, so if the two are out of
+   step (as when only height was animated and top jumped immediately) the
+   bottom edge appears to teleport and then get caught up with. Tied together,
+   the browser interpolates both on every intermediate frame, so the bottom
+   stays visually pinned while the thumb grows upward. */
 .cm-md-hbar-thumb {
     position: absolute;
     height: 4px;
-    border-radius: 999px;
-    background: rgba(115, 112, 105, 0.5);
-    z-index: 3;
+    background: var(--st-md-hbar);
+    border-radius: var(--st-radius-pill);
     opacity: 0;
     pointer-events: none;
+    z-index: var(--st-z-md-hbar);
     transition:
-        opacity 0.18s ease,
-        top 0.12s ease,
-        height 0.12s ease,
-        background 0.15s ease;
+        opacity var(--st-dur-accordion) ease,
+        top var(--st-dur-fast) ease,
+        height var(--st-dur-fast) ease,
+        background var(--st-dur-quick) ease;
 }
+
 .cm-md-hbar-thumb.visible {
     opacity: 1;
     pointer-events: auto;
 }
+
 .cm-md-hbar-thumb:hover,
 .cm-md-hbar-thumb.dragging {
-    background: rgba(90, 88, 83, 0.7);
+    background: var(--st-md-hbar-hover);
 }

@@ -1,12 +1,22 @@
-/* Custom overlay scrollbars (paired with scrollbar.js) */
+/* ====================================================================
+   scrollbar.css — custom overlay scrollbars (paired with scrollbar.js)
 
-/* ── Hide ALL native scrollbars globally ─────────────────────────────────────
+   Design tokens (--st-*) come from base.css.
+   ==================================================================== */
+
+/* ── Hide ALL native scrollbars globally ─────────────────────────────
    Electron on Linux can show GTK/webkit scrollbars on any scroll container.
-   Kill them everywhere; our JS draws the overlay thumb instead. */
+   Kill them everywhere; the JS draws the overlay thumb instead.
+
+   The universal selector plus !important is heavy, and deliberately so: the
+   targets include shadow-DOM-adjacent UA widgets and containers created at
+   runtime by CodeMirror, so there is no enumerable list of elements to
+   narrow this to. */
 * {
     scrollbar-width: none !important; /* Firefox */
     -ms-overflow-style: none !important;
 }
+
 *::-webkit-scrollbar {
     width: 0 !important;
     height: 0 !important;
@@ -14,6 +24,7 @@
     -webkit-appearance: none !important;
     background: transparent !important;
 }
+
 *::-webkit-scrollbar-thumb,
 *::-webkit-scrollbar-track,
 *::-webkit-scrollbar-button,
@@ -22,15 +33,20 @@
     background: transparent !important;
 }
 
-/* The overlay thumb (appended to <body>, positioned via JS). */
+/* ── The overlay thumb (appended to <body>, positioned via JS) ────────
+   Two transition lists, not one: on the way IN the opacity change must be
+   instantaneous (see .visible), because the thumb is placed at its new
+   coordinates in the same frame it appears — fading in would show it
+   sliding from wherever it was last time. On the way OUT the fade is what
+   makes it unobtrusive. Everything else animates identically in both. */
 .custom-scrollbar-thumb {
     position: fixed;
     right: 0;
     top: 0;
     width: 4px;
     height: 0;
-    border-radius: 4px;
-    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: var(--st-radius-4);
+    background-color: var(--st-tint-scroll);
     opacity: 0;
     pointer-events: none; /* enabled only when visible */
     /* This thumb is appended directly to <body> and positioned via fixed
@@ -42,12 +58,12 @@
        z-index — so the thumb needs its own explicit no-drag or it becomes
        ungrabbable whenever a dropdown places it over a draggable area. */
     -webkit-app-region: no-drag;
+    z-index: var(--st-z-scrollbar);
     transition:
-        opacity 0.25s ease,
-        width 0.12s ease,
-        right 0.12s ease,
-        background-color 0.12s ease;
-    z-index: 99999;
+        opacity var(--st-dur-slow) ease,
+        width var(--st-dur-fast) ease,
+        right var(--st-dur-fast) ease,
+        background-color var(--st-dur-fast) ease;
 }
 
 .custom-scrollbar-thumb.visible {
@@ -55,18 +71,18 @@
     pointer-events: auto;
     transition:
         opacity 0s,
-        width 0.12s ease,
-        right 0.12s ease,
-        background-color 0.12s ease;
+        width var(--st-dur-fast) ease,
+        right var(--st-dur-fast) ease,
+        background-color var(--st-dur-fast) ease;
 }
 
 .custom-scrollbar-thumb:hover,
 .custom-scrollbar-thumb.dragging {
-    background-color: rgba(0, 0, 0, 0.25);
+    background-color: var(--st-tint-scroll-hover);
 }
 
-/* Sidebar (file-tree) thumb must sit below the settings overlay (z-index 9999)
-   so it's covered by the modal even if a hide call is ever missed. */
+/* The sidebar thumb sits BELOW the settings overlay, so the modal covers it
+   even if a hide call is ever missed. */
 .custom-scrollbar-thumb--sidebar {
-    z-index: 9998;
+    z-index: var(--st-z-scrollbar-sidebar);
 }

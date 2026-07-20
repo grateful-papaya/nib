@@ -1,18 +1,20 @@
 /* ====================================================================
-   Sidebar
+   Sidebar shell — the container, its top action row, the width resizer
+   and the bottom footer. The two things that live INSIDE it (the file
+   tree and the outline panel) are in file-tree.css and toc.css.
    ==================================================================== */
 .sidebar {
-    width: 0;
-    overflow: hidden;
-    transition: width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
-    background: #ebebeb;
-    flex-shrink: 0;
+    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    flex-shrink: 0;
     box-sizing: border-box;
-    position: relative;
+    width: 0;
     max-width: 50vw;
+    overflow: hidden;
+    background: var(--st-tree-bg);
+    transition: width var(--st-slide-transition);
 }
 
 .sidebar.open,
@@ -20,156 +22,170 @@
     width: var(--sidebar-width, 200px);
 }
 
-/* divider above the settings button */
-.sidebar::after {
-    content: "";
-    position: absolute;
-    bottom: 48px;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background-color: rgba(0, 0, 0, 0.1);
-    z-index: 1;
-}
-
-/* disable transition while resizing */
+/* While dragging the resizer the width is being written every pointermove;
+   a transition on top of that lags the pointer by a full frame budget. */
 .sidebar.resizing {
     transition: none;
 }
 
-/* top action button group */
+/* Divider above the footer. Drawn on the sidebar rather than as a footer
+   border-top so the outline panel — which stops exactly at the footer's top
+   edge — can redraw it (see toc.css) without a doubled line. */
+.sidebar::after {
+    content: "";
+    position: absolute;
+    bottom: var(--st-footer-h);
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background-color: var(--st-hairline);
+    z-index: var(--st-z-row);
+}
+
+/* ====================================================================
+   Top action row: [search] [new folder] [new file]
+   ==================================================================== */
+/* The height is stated rather than left to emerge from padding + content,
+   because .toc-header has to match it exactly (see toc.css) and an emergent
+   height is not something another file can depend on. --st-action-row-h is
+   derived from --st-btn-size, so the two stay locked. */
 .sidebar-action-group {
     display: flex;
     gap: 4px;
-    padding: 4px 6px;
-    width: 100%;
-    box-sizing: border-box;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
     flex-shrink: 0;
+    width: 100%;
+    height: var(--st-action-row-h);
+    padding: 4px 6px;
+    box-sizing: border-box;
+    border-top: 1px solid var(--st-hairline);
+    border-bottom: 1px solid var(--st-hairline);
 }
 
-/* new file/folder buttons (more specific than button[type="button"] to override border-radius) */
+/* New file / new folder buttons. The explicit border-radius overrides the
+   50% coming from the global `button[type="button"]` rule — this selector is
+   no more specific than that one, so it wins on source order; keep this
+   sheet loaded after the global button styles. */
 .add-btn {
+    /* Held in a variable so the action-group variant below can extend the
+       transition list instead of restating it (transition is not additive). */
+    --add-btn-fade:
+        background-color var(--st-dur-quick) ease,
+        border-color var(--st-dur-quick) ease,
+        opacity var(--st-dur-quick) ease;
+
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 28px;
+    height: var(--st-btn-size);
     padding: 0;
     border: none;
-    border-radius: 8px; /* overrides the 50% from button[type="button"] */
-    background-color: #fcfcfc;
+    border-radius: var(--st-radius);
+    background-color: var(--st-bar-bg);
     opacity: 0.8;
     cursor: pointer;
-    transition:
-        background-color 0.15s ease,
-        border-color 0.15s ease,
-        opacity 0.15s ease;
-}
-.add-btn:hover {
-    background-color: #ededed;
-}
-.add-btn img {
-    width: 55%;
-    height: 55%;
-    display: block;
+    transition: var(--add-btn-fade);
 }
 
-/* The two buttons that live in .sidebar-action-group alongside the search
-   box (add-folder-btn, add-file-btn) need to visibly slide, not snap, as
-   the search box's width transitions — flex-grow recalculates their
-   rendered width every frame regardless, but without their own `width`
-   transition that recalculation happens instantly rather than smoothly. */
+.add-btn:hover {
+    background-color: var(--st-card-bg);
+}
+
+.add-btn img {
+    display: block;
+    width: 55%;
+    height: 55%;
+}
+
+/* The buttons sharing the row with the search box must visibly slide, not
+   snap, as the search box's width transitions. flex-grow recalculates their
+   rendered width every frame either way — but without their own `width`
+   transition that recalculation is applied instantly per frame, which reads
+   as a jump rather than a slide. */
 .sidebar-action-group .add-btn {
-    transition:
-        background-color 0.15s ease,
-        border-color 0.15s ease,
-        opacity 0.15s ease,
-        width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+    transition: var(--add-btn-fade), width var(--st-slide-transition);
 }
 
 /* ====================================================================
-   Sidebar search (expanding search box, leftmost in the action group).
-   Collapsed + not hovered: no background at all — just the bare icon,
-   flush with the sidebar. Hovering the collapsed box tints it like
-   .add-btn:hover. Once expanded (searching), the background comes back so
-   the input field reads as a distinct box, same as before.
+   Sidebar search — expanding search box, leftmost in the action group.
 
-   Growth is driven entirely by an explicit `width` set from JS (see
-   sidebar.js expand()/collapse()), transitioning between two concrete
-   pixel values (28px <-> the JS-computed target). Both max-width tricks
-   and flex-grow were tried first and rejected: flex-grow itself can't be
-   interpolated (it snaps instantly), and animating max-width toward a
-   value much larger than the actual rendered size means most of the
-   transition's duration is "spent" past the point where anything visible
-   is still changing — which is what reads as "not smooth." A `width`
-   transition between the box's real start and end sizes doesn't have
-   that problem: every frame of the transition maps to a frame of visible
-   movement.
+   Collapsed and not hovered it has no background at all: just the bare icon
+   flush with the sidebar. Hovering the collapsed box tints it like a
+   .add-btn. Once expanded the background returns so the input reads as a
+   distinct field rather than a button.
+
+   Growth is driven entirely by an explicit `width` written from JS (see
+   sidebar.js expand()/collapse()), transitioning between two concrete pixel
+   values (--st-btn-size ⇄ the JS-computed target). Both max-width tricks and
+   flex-grow were tried first and rejected: flex-grow cannot be interpolated
+   at all (it snaps), and animating max-width toward a value much larger than
+   the real rendered size spends most of the transition's duration past the
+   point where anything visible is still moving — which is precisely what
+   reads as "not smooth". A `width` transition between the box's true start
+   and end sizes has no such dead tail: every frame of the transition maps to
+   a frame of visible movement.
    ==================================================================== */
 .sidebar-search {
     display: flex;
     align-items: center;
-    flex: 0 0 auto; /* flex-basis pinned to auto so `width` — not
-                        flex-basis — controls this item's size */
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background-color: transparent;
+    /* flex-basis pinned to auto so `width` — not flex-basis — is what sizes
+       this item, which is what makes the JS-driven width transition work. */
+    flex: 0 0 auto;
+    width: var(--st-btn-size);
+    height: var(--st-btn-size);
     box-sizing: border-box;
+    border-radius: var(--st-radius);
+    background-color: transparent;
     overflow: hidden;
     transition:
-        width 0.22s cubic-bezier(0.25, 0.1, 0.25, 1),
-        background-color 0.15s ease;
+        width var(--st-slide-transition),
+        background-color var(--st-dur-quick) ease;
 }
 
 .sidebar-search:hover {
-    background-color: #ededed;
+    background-color: var(--st-card-bg);
 }
 
-.sidebar-search.expanded {
-    background-color: #fcfcfc;
-}
+/* Expanded it is a text field, not a button — so it keeps the raised bar
+   surface and stops picking up the button hover tint. */
+.sidebar-search.expanded,
 .sidebar-search.expanded:hover {
-    background-color: #fcfcfc; /* stop picking up the button hover tint once
-                                   it's a text field, not a button */
+    background-color: var(--st-bar-bg);
 }
 
 .search-toggle-btn {
-    flex: 0 0 28px;
-    width: 28px;
-    height: 28px;
-    background-color: transparent;
+    flex: 0 0 var(--st-btn-size);
+    width: var(--st-btn-size);
+    height: var(--st-btn-size);
     opacity: 1;
 }
+
+.search-toggle-btn,
 .search-toggle-btn:hover {
     background-color: transparent;
 }
+
 .search-toggle-btn img {
     width: 55%;
     height: 55%;
 }
 
-/* the actual text field, reusing the same visual language as the inline
-   rename input (.tree-inline-input): light border, subtle focus ring */
 .sidebar-search-input {
     flex: 1 1 auto;
     min-width: 0;
-    width: auto;
     padding: 0;
     margin-right: 0;
     border: none;
     outline: none;
     background: transparent;
-    font-size: 0.86rem;
     font-family: inherit;
-    color: #212529;
+    font-size: 0.86rem;
+    color: var(--st-text);
     opacity: 0;
     transition:
-        opacity 0.15s ease,
-        margin-right 0.22s cubic-bezier(0.25, 0.1, 0.25, 1),
-        padding 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+        opacity var(--st-dur-quick) ease,
+        margin-right var(--st-slide-transition),
+        padding var(--st-slide-transition);
 }
 
 .sidebar-search.expanded .sidebar-search-input {
@@ -179,22 +195,23 @@
 }
 
 .sidebar-search-input::placeholder {
-    color: #999999;
+    color: var(--st-text-faint);
 }
 
 /* ====================================================================
-   Search results list (replaces the normal file tree while a search
-   query is active). Reuses .item-label's look so rows feel identical to
-   the regular tree, just flattened with no indent/guide lines.
+   Search results list — replaces the file tree while a query is active.
+   Reuses .item-label wholesale so rows are pixel-identical to the tree's,
+   just flattened: no indent, no guide lines.
    ==================================================================== */
 .search-results-container {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    width: 100%;
     padding: 4px 6px;
     box-sizing: border-box;
-    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
+
 .search-results-container.hidden {
     display: none;
 }
@@ -203,1096 +220,116 @@
     margin: 0;
 }
 
+/* The tree's .item-label has no left padding (the indent supplies it); a flat
+   list has no indent, so it supplies its own. */
 .search-result-item .item-label {
     padding-left: 6px;
 }
 
-.search-result-empty {
-    padding: 12px 8px;
-    font-size: 0.88rem;
-    color: #888888;
-    user-select: none;
-}
-
-/* highlighted matched characters within a search result's file name */
+/* Characters matched by the fuzzy matcher, inside a result's file name. */
 .search-match-highlight {
-    background-color: rgba(24, 108, 217, 0.16);
-    color: #186cd9;
-    border-radius: 3px;
+    background-color: var(--st-accent-a16);
+    color: var(--st-accent);
+    border-radius: var(--st-radius-xs);
 }
 
-/* bottom settings button */
+/* ====================================================================
+   Width resizer — a grab strip straddling the sidebar's right edge
+   (negative margins pull it half onto each side so it costs no layout).
+
+   The band itself (::after) is the shared guide-band primitive; only the
+   axis and the two states are below.
+   ==================================================================== */
+.sidebar-resizer {
+    position: relative;
+    flex-shrink: 0;
+    width: var(--st-grab);
+    height: 100%;
+    margin-left: calc(var(--st-grab) / -2);
+    margin-right: calc(var(--st-grab) / -2);
+    background-color: transparent;
+    cursor: col-resize;
+    z-index: var(--st-z-resizer);
+}
+
+.window.settings-active .sidebar-resizer {
+    pointer-events: none;
+    cursor: default;
+}
+
+.window.settings-active .sidebar-resizer::after {
+    display: none;
+}
+
+/* Vertical band, collapsed at rest. */
+.sidebar-resizer::after {
+    top: 0;
+    left: 50%;
+    width: var(--st-grab);
+    height: 100%;
+    transform: translateX(-50%) scaleX(0);
+}
+
+/* Translucent preview on hover, and on hovering the outline panel's corner
+   handle — that handle drives width and split together, so both guides must
+   light up. Grouped because they are the same state, reached two ways. */
+.sidebar-resizer:hover::after,
+.sidebar:has(.toc-vsplit-corner:hover) + .sidebar-resizer::after {
+    transform: translateX(-50%) scaleX(0.5);
+    background-color: var(--st-guide-soft);
+}
+
+/* Solid while actually dragging. The transform is restated (rather than
+   inherited from :hover) because during the corner's dual drag .resizing is
+   set while the pointer sits at the corner, never over the resizer itself. */
+.sidebar.resizing + .sidebar-resizer::after {
+    transform: translateX(-50%) scaleX(0.5);
+    background-color: var(--st-guide);
+    transition: none;
+}
+
+/* ====================================================================
+   Footer — settings on the left, export on the right.
+   ==================================================================== */
+.sidebar-footer {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    width: 100%;
+    height: var(--st-footer-h);
+    padding: 0 10px;
+    box-sizing: border-box;
+    z-index: var(--st-z-footer);
+}
+
 .sidebar-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px;
-    border: none;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    margin: 10px;
     flex-shrink: 0;
-    position: relative;
+    width: var(--st-btn-size);
+    height: var(--st-btn-size);
+    padding: 10px;
+    margin: 10px;
+    border: none;
+    border-radius: 50%;
 }
+
 .sidebar-btn img {
     width: 16px;
     height: 16px;
 }
 
-/* ====================================================================
-   File tree (maximized click hit-box, visual spacing)
-   ==================================================================== */
-.file-tree-container {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 4px;
-    box-sizing: border-box;
-    width: 100%;
-}
-.file-tree-container.hidden {
-    display: none;
-}
-
-/* pointer sensitivity for child nodes while dragging */
-.file-tree-container.tree-dragging .item-label * {
-    pointer-events: none;
-}
-.file-tree-container.tree-dragging .tree-item.directory > .item-label {
-    pointer-events: auto;
-}
-.file-tree-container.tree-dragging .item-label::before {
-    background-color: transparent !important;
-}
-
-/* shared tree-list */
-.tree-list {
-    list-style: none;
-    margin: 0;
-    width: 100%;
-    box-sizing: border-box;
-    position: relative;
-    padding-left: 12px;
-}
-
-/* top-level root list adjustments */
-.file-tree-container > .tree-list {
-    padding: 4px 6px 0 6px;
-    border-left: none;
-    margin-left: 0;
-    width: 100%;
-}
-
-/* zero margin between items so click hit-boxes are continuous */
-.tree-item {
-    margin: 0;
-    display: block;
-    width: unset;
-    box-sizing: border-box;
-}
-
-/* main clickable label; padding fills vertical gaps */
-.item-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding-top: 5px; /* extend vertical click range */
-    padding-bottom: 5px;
-    padding-right: 6px;
-    width: 100%;
-    box-sizing: border-box;
-    font-size: 0.9rem;
-    color: #212529;
-    cursor: pointer;
-    user-select: none;
-    position: relative;
-    z-index: 1;
-    background-color: transparent !important; /* body background stays transparent */
-    transition: color 0.1s ease;
-}
-
-/* the visible highlight box is handled by this pseudo-element */
-.item-label::before {
-    content: "";
-    position: absolute;
-    top: 2px; /* 2px top/bottom inset for visual spacing */
-    bottom: 2px;
-    left: 2px;
-    right: 2px;
-    border-radius: 8px; /* rounded box */
-    z-index: -1; /* sit behind the text content */
-    background-color: transparent;
-    transition: background-color 0.12s ease;
-}
-
-/* all highlight color changes apply only to ::before */
-.item-label.hovered::before {
-    background-color: rgba(0, 0, 0, 0.08);
-}
-
-.item-label.context-selected::before {
-    background-color: rgba(0, 0, 0, 0.08);
-}
-
-.tree-item.selected > .item-label {
-    font-weight: 500;
-    color: #186cd9;
-}
-.tree-item.selected > .item-label::before {
-    background-color: rgba(24, 108, 217, 0.12);
-}
-
-/* sync selected item icon color */
-.tree-item.selected > .item-label > img.tree-icon {
-    filter: invert(36%) sepia(84%) saturate(2258%) hue-rotate(205deg)
-        brightness(96%) contrast(93%);
-}
-
-/* ellipsis for long names */
-.item-text {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.tree-item.dragging {
-    opacity: 0.4;
-}
-
-/* guideline when dragging over a folder */
-.tree-item.directory.drag-over > .item-label::before {
-    background-color: rgba(24, 108, 217, 0.08);
-    outline: 1px solid #186cd9;
-    outline-offset: -1px;
-}
-
-/* tree icon */
-.tree-icon {
-    opacity: 0.6;
-    width: 12px;
-    height: 12px;
-    flex-shrink: 0;
-    display: block;
-    user-select: none;
-    -webkit-user-drag: none;
-}
-
-.tree-item[data-virtual-root="true"] > .item-label {
-    padding-top: 6px;
-    padding-bottom: 6px;
-}
-
-.tree-item[data-virtual-root="true"] > .item-label > .tree-icon {
-    opacity: 0.9;
-}
-
-/* Section headers (Pinned / Workspace): no fill — just an underline and a
-   muted, small uppercase label, so they read as section titles rather than
-   hoverable rows. */
-.tree-item[data-virtual-root="true"] > .item-label::before {
-    background-color: transparent !important;
-    border-radius: 0;
-    left: 0;
-    right: 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
-}
-
-.tree-item[data-virtual-root="true"] > .item-label .item-text {
-    letter-spacing: 0.04em;
-}
-
-.tree-item.selected > .item-label > .tree-icon {
-    opacity: 1;
-}
-
-.tree-item.opened > .item-label > .tree-icon {
-    opacity: 0.9;
-}
-
-.tree-item.focused-item > .item-label::before {
-    background-color: rgba(0, 0, 0, 0.1);
-}
-
-/* .selected must always win visually over .focused-item, regardless of which
-   class was applied more recently (both rules have equal specificity, so
-   without this the later one in source order silently overrides the other's
-   background whenever a row briefly carries both classes). */
-.tree-item.selected.focused-item > .item-label::before {
-    background-color: rgba(24, 108, 217, 0.12);
-}
-
-.tree-empty-notice {
-    padding: 12px 8px;
-    font-size: 0.88rem;
-    color: #888888;
-    user-select: none;
-}
-
-/* inline rename input */
-.tree-inline-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 2px 6px;
-    font-size: 0.88rem;
-    font-family: inherit;
-    background-color: #f5f5f5;
-    border: 1.5px solid #a3bffa;
-    border-radius: 6px;
-    outline: none;
-    margin-left: 2px;
-    height: 22px;
-    line-height: 1;
-}
-.tree-inline-input::selection {
-    background-color: #b3d7ff;
-}
-
-/* subtree wrapper (pure CSS grid accordion animation) */
-.tree-children {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.tree-children.expanded {
-    grid-template-rows: 1fr;
-}
-.tree-children-inner {
-    min-height: 0;
-    overflow: hidden;
-    position: relative;
-}
-/* Vertical hierarchy guide line down the left of a folder's children. The
-   x-position (--guide-x) is set per-depth in file-tree.js so nested folders
-   each get their own line at the right indent. */
-.tree-children-inner::before {
-    content: "";
-    position: absolute;
-    left: var(--guide-x, 13px);
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background-color: rgba(0, 0, 0, 0.12);
-    pointer-events: none;
-}
-/* Workspace direct children aren't indented, so they get no guide line. */
-.tree-children-root::before {
-    display: none;
-}
-
-/* ====================================================================
-   Sidebar resizer
-   ==================================================================== */
-.sidebar-resizer {
-    position: relative;
-    width: 10px;
-    margin-left: -5px;
-    margin-right: -5px;
-    height: 100%;
-    cursor: col-resize;
-    z-index: 1001;
-    background-color: transparent;
-    flex-shrink: 0;
-}
-
-/* disable resizer while settings are open */
-.window.settings-active .sidebar-resizer {
-    pointer-events: none;
-    cursor: default;
-}
-.window.settings-active .sidebar-resizer::after {
-    display: none;
-}
-
-/* guideline pseudo-element */
-.sidebar-resizer::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%) scaleX(0);
-    width: 10px;
-    height: 100%;
-    background-color: #c2d8f2;
-    transform-origin: center;
-    transition:
-        transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-        background-color 0.15s ease,
-        box-shadow 0.15s ease;
-}
-
-/* translucent hint on hover */
-.sidebar-resizer:hover::after {
-    transform: translateX(-50%) scaleX(0.5);
-    background-color: rgba(194, 216, 242, 0.6);
-}
-
-/* show guideline while dragging — transform made explicit so the guide
-   stays visible even when the pointer isn't over the resizer itself
-   (e.g. during the TOC corner's dual drag, where .resizing is set but the
-   pointer sits at the corner) */
-.sidebar.resizing + .sidebar-resizer::after {
-    transform: translateX(-50%) scaleX(0.5);
-    background-color: #c2d8f2;
-    transition: none;
-}
-
-/* hovering the TOC corner (dual-resize zone) previews BOTH guides: the
-   vsplit lights via its own :hover (the corner is its child); this lights
-   the width guide to match */
-.sidebar:has(.toc-vsplit-corner:hover) + .sidebar-resizer::after {
-    transform: translateX(-50%) scaleX(0.5);
-    background-color: rgba(194, 216, 242, 0.6);
-}
-
-/* ====================================================================
-   Context menu
-   ==================================================================== */
-.context-menu {
-    position: fixed;
-    z-index: 10000;
-    background-color: #f6f6f6;
-    border: 1px solid #dcdcdc;
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-    padding: 4px;
-    min-width: 150px;
-    box-sizing: border-box;
-    font-size: 0.86rem;
-    user-select: none;
-    opacity: 0;
-    transform: scale(0.96);
-    pointer-events: none;
-    transition:
-        opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.context-menu.show {
-    opacity: 1;
-    transform: scale(1);
-    pointer-events: auto;
-}
-
-.context-menu-item {
-    display: flex;
-    align-items: center;
-    padding: 6px 12px;
-    color: #222222;
-    cursor: pointer;
-    border-radius: 5px;
-    transition: background-color 0.1s ease;
-}
-
-.context-menu-divider {
-    border-top: 1px solid rgba(0, 0, 0, 0.06);
-    margin: 0;
-}
-
-.context-menu-item:hover {
-    background-color: rgba(0, 0, 0, 0.06);
-}
-
-/* disabled state (more specific than .context-menu-item) */
-.context-menu-item.disabled {
-    display: none;
-    pointer-events: none;
-    background-color: transparent;
-}
-
-/* delete item color (more specific than .context-menu-item) */
-.context-menu-item.delete {
-    color: #e54b4b;
-}
-.context-menu-item.delete:hover {
-    background-color: rgba(229, 75, 75, 0.08);
-}
-
-/* prevent CodeMirror outline bleed */
-.editor-body .cm-editor {
-    outline: none;
-}
-.editor-body .cm-focused {
-    outline: none;
-}
-
-/* Sidebar footer: settings on the left, export on the right. */
-.sidebar-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    height: 48px;
-    padding: 0 10px;
-    box-sizing: border-box;
-    width: 100%;
-    flex-shrink: 0;
-    position: relative;
-    z-index: 2;
-}
-
-/* remove individual button margins inside the footer */
+/* Inside the footer the flex row does the spacing, so drop the margins. */
 .sidebar-footer .sidebar-btn {
     margin: 0;
 }
-/* override display: flex via a combined selector (no !important) */
+
+/* Combined selector rather than !important: `.sidebar-btn.hidden` outranks
+   `.sidebar-btn`'s display:flex on specificity alone. */
 .sidebar-btn.hidden {
     display: none;
-}
-
-.file-meta-tooltip {
-    position: fixed;
-    z-index: 9999;
-    background: #ffffff;
-    border: 1px solid #e4e6eb;
-    border-radius: 10px;
-    padding: 10px 14px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-    font-size: 12px;
-    color: #444;
-    min-width: 180px;
-    pointer-events: none;
-    opacity: 0;
-    transform: translateX(-4px);
-    transition:
-        opacity 0.15s ease,
-        transform 0.15s ease;
-}
-
-.file-meta-tooltip.visible {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.fmeta-name {
-    font-weight: 600;
-    font-size: 12.5px;
-    margin-bottom: 8px;
-    color: #222;
-    word-break: break-all;
-}
-
-.fmeta-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    line-height: 1.8;
-    color: #666;
-}
-
-.fmeta-row span:first-child {
-    color: #999;
-    flex-shrink: 0;
-}
-
-/* Map font-size and line-height CSS variables onto the editor body. */
-#editor-body {
-    --editor-font-size: 16px;
-    --editor-line-height: 1.6;
-}
-
-/* Force-sync CodeMirror's content and gutter areas to those variables. */
-#editor-body .cm-content,
-#editor-body .cm-gutters {
-    font-size: var(--editor-font-size) !important;
-    line-height: var(--editor-line-height) !important;
-}
-
-.section-arrow-icon {
-    margin-left: auto;
-    width: 10px;
-    height: 10px;
-    opacity: 0.4;
-    user-select: none;
-    -webkit-user-drag: none;
-    transition:
-        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.15s ease;
-    transform: rotate(0deg);
-}
-
-.section-arrow-icon.expanded {
-    transform: rotate(-180deg);
-}
-
-.item-label:hover .section-arrow-icon {
-    opacity: 0.8;
-}
-
-/* Reveal-in-sidebar flash: blink the row's highlight box ~3 times so it's easy
-   to spot after scrolling to it. */
-@keyframes reveal-flash-blink {
-    0%,
-    100% {
-        background-color: rgba(24, 108, 217, 0.1);
-    }
-    50% {
-        background-color: rgba(24, 108, 217, 0.28);
-    }
-}
-.item-label.reveal-flash::before {
-    animation: reveal-flash-blink 1s ease-in-out 2;
-}
-
-/* ====================================================================
-   Outline (TOC) panel — a second "sidebar" stacked over the file tree.
-
-   Absolutely positioned inside .sidebar and moved with transform, so
-   showing/hiding it never affects layout: the tree underneath keeps its
-   exact scroll/width state, and the switch reads as a new sidebar
-   sliding in over the old one (and sliding back off to reveal it).
-   Stops 48px above the bottom so the footer (settings/export) stays
-   visible and clickable in both views.
-
-   The transform transition is what animates tree ⇄ toc switches; when
-   the sidebar is opening from or collapsing to width 0, toc.js
-   suppresses this transition (snapPanel) so the width animation runs
-   alone — the panel never slides and resizes at the same time.
-   ==================================================================== */
-.sidebar-toc-panel {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 48px; /* .sidebar-footer's height */
-    background: #ebebeb; /* same surface as .sidebar: reads as its own bar */
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1); /* redraws the footer
-                        divider (.sidebar::after, z-index:1) it covers */
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    z-index: 3; /* above tree rows (.item-label is z-index:1) and the
-                   ::after divider; below .sidebar-footer isn't needed —
-                   the panel simply ends above it */
-    transform: translateX(-100%);
-    transition: transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
-    pointer-events: none; /* hidden panel must never eat tree clicks: with
-                   overflow the sidebar clips it visually, but it still
-                   exists at negative X during the slide-out */
-}
-
-.sidebar.toc-open .sidebar-toc-panel {
-    transform: translateX(0);
-    pointer-events: auto;
-}
-
-/* Header row sized to match .sidebar-action-group (4px padding + 28px
-   buttons + top/bottom borders = 38px) so the divider lines of the two
-   panels align during the slide. */
-.toc-header {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    height: 38px;
-    padding: 0 12px;
-    box-sizing: border-box;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: #8a8a8a;
-    user-select: none;
-}
-
-.toc-list-container {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 4px; /* match .file-tree-container so highlight boxes start at
-                     the same x as the tree's */
-    box-sizing: border-box;
-    /* thin native scrollbar for now; swap for the custom overlay by adding
-       .custom-scroll + attachScrollbar() like the other containers */
-    scrollbar-width: thin;
-}
-
-/* Outline rows: same rounded ::before highlight as the file tree's .item-label
-   (left/right:2px, radius 8px, hover grey, active = .tree-item.selected blue),
-   but INSET per depth rather than edge-to-edge — the indent comes from the
-   container (.toc-children-inner padding-left), so the box shifts right with
-   the row and hugs just inside the guide line. Deliberately different from the
-   flat, edge-to-edge tree/References so the outline's hierarchy stays legible
-   on hover. */
-.toc-item {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.88rem;
-    color: #212529;
-    padding: 5px 6px;
-    cursor: pointer;
-    user-select: none;
-    transition: color 0.1s ease;
-}
-.toc-item::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    bottom: 2px;
-    left: 2px;
-    right: 2px;
-    border-radius: 8px;
-    z-index: -1;
-    background-color: transparent;
-    transition: background-color 0.12s ease;
-}
-.toc-item:hover::before {
-    background-color: rgba(0, 0, 0, 0.08);
-}
-.toc-item.active {
-    color: #186cd9;
-    font-weight: 500;
-}
-.toc-item.active::before {
-    background-color: rgba(24, 108, 217, 0.12);
-}
-
-.toc-item-text {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* Collapse chevron (arrow-down.svg): points down when expanded, rotates to
-   point right when collapsed — same motion language as .section-arrow-icon.
-   Padding+negative margin grows the hit target without moving layout. */
-.toc-arrow {
-    width: 10px;
-    height: 10px;
-    flex-shrink: 0;
-    box-sizing: content-box;
-    padding: 4px;
-    margin: -4px;
-    opacity: 0.45;
-    user-select: none;
-    -webkit-user-drag: none;
-    transition:
-        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.15s ease;
-}
-.toc-item:hover .toc-arrow {
-    opacity: 0.8;
-}
-.toc-arrow.collapsed {
-    transform: rotate(-90deg);
-}
-
-/* Leaf headings get a same-width spacer so their text aligns with siblings
-   that do have an arrow (mirrors how tree files align with folders). */
-.toc-arrow-spacer {
-    width: 10px;
-    flex-shrink: 0;
-}
-
-/* Child container: reuses the tree's grid accordion (.tree-children /
-   .tree-children-inner, incl. its ::before guide line). The padding-left here
-   is what indents each depth AND, because the row is shifted with it, makes
-   the .toc-item::before highlight sit inset — hugging just inside the guide
-   line. --guide-x (11px) puts the line a touch left of the row's arrow. */
-.toc-children-inner {
-    padding-left: 13px;
-    --guide-x: 11px;
-}
-
-.toc-empty {
-    padding: 12px 8px;
-    font-size: 0.88rem;
-    color: #888888;
-    user-select: none;
-}
-
-/* ====================================================================
-   Outline ↕ References split.
-
-   The panel is a flex column of: outline section (definite height, driven
-   by --toc-split), the drag bar, then the references section (fills the
-   rest). Each section is its own flex column (header + scroll list); the
-   min-height:0 lets the inner list actually scroll instead of expanding the
-   section past the split.
-   ==================================================================== */
-.toc-section {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-}
-.toc-outline-section {
-    height: var(--toc-split, 58%); /* "위에 절반 좀 넘게" */
-    flex: 0 0 auto;
-}
-.toc-references-section {
-    flex: 1 1 auto;
-}
-/* the drag bar already draws the divider above References, so drop the
-   header's own top border there to avoid a doubled line */
-.toc-references-section .toc-header {
-    border-top: none;
-}
-/* allow both lists to shrink within their section and scroll */
-.toc-list-container {
-    min-height: 0;
-}
-
-/* Horizontal drag bar. A centered hairline that lights up (same guide blue
-   as the width resizer) on hover / while dragging. */
-.toc-vsplit {
-    position: relative;
-    flex: 0 0 auto;
-    height: 10px; /* same hit thickness as .sidebar-resizer */
-    cursor: row-resize;
-    z-index: 4; /* above list rows so the bar (and corner) stay grabbable */
-}
-/* the permanent divider: a single edge-to-edge hairline */
-.toc-vsplit::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 1px;
-    transform: translateY(-50%);
-    background: rgba(0, 0, 0, 0.1);
-}
-/* hover/drag guide: identical language to .sidebar-resizer::after —
-   10px band scaled to half (5px), translucent on hover, solid while
-   dragging. Hovering the corner lights this too (corner is a child, so
-   :hover propagates). */
-.toc-vsplit::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 10px;
-    transform: translateY(-50%) scaleY(0);
-    background-color: #c2d8f2;
-    transform-origin: center;
-    transition:
-        transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-        background-color 0.15s ease;
-}
-.toc-vsplit:hover::after {
-    transform: translateY(-50%) scaleY(0.5);
-    background-color: rgba(194, 216, 242, 0.6);
-}
-.sidebar-toc-panel.splitting .toc-vsplit::after {
-    transform: translateY(-50%) scaleY(0.5);
-    background-color: #c2d8f2;
-    transition: none;
-}
-
-/* Corner zone at the bar's right end, over the sidebar's right edge —
-   grabbing it drives the split ratio (Y) and the sidebar width (X)
-   together. Deliberately draws NOTHING: the nwse-resize cursor is the only
-   affordance, keeping the divider a single clean line. */
-.toc-vsplit-corner {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    width: 16px;
-    height: 16px;
-    transform: translateY(-50%);
-    cursor: nwse-resize;
-    z-index: 5;
-}
-
-/* Enlarged, obviously-clickable collapse control (wraps the arrow img). The
-   bare 10px arrow was easy to miss, which read as "folding doesn't work".
-   Leaf rows get a same-width spacer so text still aligns. */
-.toc-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.toc-toggle:hover {
-    background-color: rgba(0, 0, 0, 0.12);
-}
-.toc-toggle .toc-arrow {
-    padding: 0;
-    margin: 0;
-}
-.toc-arrow-spacer {
-    width: 16px;
-}
-
-/* Group headers inside References: Links / Documents / Images. Same muted
-   small-caps voice as .toc-header, scaled down to a row label. The whole
-   header is a collapse toggle now (chevron + label), so it's a clickable flex
-   row rather than a plain text line. */
-.toc-ref-group {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 8px 6px 3px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #9a9a9a;
-    user-select: none;
-    cursor: pointer;
-}
-.toc-ref-group:hover {
-    color: #7a7a7a;
-}
-.toc-ref-group:first-child {
-    padding-top: 3px;
-}
-
-/* Chevron for a ref group header. Smaller and tighter than the outline's
-   .toc-toggle: the whole header row is the hit target here, so the arrow is
-   purely an indicator and doesn't need its own enlarged box. Points down when
-   expanded, rotates to point right when collapsed. */
-.toc-ref-arrow {
-    width: 9px;
-    height: 9px;
-    flex-shrink: 0;
-    opacity: 0.5;
-    -webkit-user-drag: none;
-    transition:
-        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.15s ease;
-}
-.toc-ref-group:hover .toc-ref-arrow {
-    opacity: 0.85;
-}
-.toc-ref-arrow.collapsed {
-    transform: rotate(-90deg);
-}
-
-/* Body of a ref group: reuses the tree's .tree-children 0fr⇄1fr grid accordion
-   (added on the wrapper in JS) for the collapse animation, but stays flat and
-   edge-to-edge — no indent, no guide line (unlike .toc-children-inner). */
-.toc-ref-children {
-    min-height: 0;
-    overflow: hidden;
-}
-
-/* Reference rows: [label] on the left (accent, monospace), destination
-   dimmed and ellipsized on the right. Same hover box as outline rows. */
-.toc-ref-item {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    padding: 5px 6px;
-    cursor: pointer;
-    user-select: none;
-}
-.toc-ref-item::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    bottom: 2px;
-    left: 2px;
-    right: 2px;
-    border-radius: 8px;
-    z-index: -1;
-    background-color: transparent;
-    transition: background-color 0.12s ease;
-}
-.toc-ref-item:hover::before {
-    background-color: rgba(0, 0, 0, 0.08);
-}
-.toc-ref-label {
-    flex-shrink: 0;
-    max-width: 55%;
-    color: #186cd9;
-    font-weight: 500;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.toc-ref-dest {
-    flex: 1;
-    min-width: 0;
-    color: #8a8a8a;
-    font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* ====================================================================
-   Raw-source hover tooltip ("렌더링 풀린 거"): shows the markdown behind
-   whatever rendered element the pointer is over. Follows the cursor
-   (positioned from JS), mirrors .file-meta-tooltip's surface but monospace.
-   ==================================================================== */
-.raw-source-tooltip {
-    position: fixed;
-    z-index: 10001;
-    max-width: 460px;
-    padding: 6px 9px;
-    background: #2b2b2b;
-    color: #f3f3f3;
-    border-radius: 7px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-    word-break: break-word;
-    pointer-events: none;
-    opacity: 0;
-    transform: translateY(3px);
-    transition:
-        opacity 0.12s ease,
-        transform 0.12s ease;
-}
-.raw-source-tooltip.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-/* ====================================================================
-   Settings toggle switch (Settings → General). Self-contained (checkbox
-   visually hidden, track+thumb drawn on the sibling span) so it doesn't
-   depend on any settings.css internals. Same accent as selected rows.
-   ==================================================================== */
-.nib-switch {
-    position: relative;
-    display: inline-block;
-    flex-shrink: 0;
-    width: 38px;
-    height: 22px;
-    cursor: pointer;
-}
-.nib-switch input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-.nib-switch-track {
-    position: absolute;
-    inset: 0;
-    background: #c9c9c9;
-    border-radius: 11px;
-    transition: background-color 0.18s ease;
-}
-.nib-switch-track::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-    transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.nib-switch input:checked + .nib-switch-track {
-    background: #186cd9;
-}
-.nib-switch input:checked + .nib-switch-track::after {
-    transform: translateX(16px);
-}
-.nib-switch input:focus-visible + .nib-switch-track {
-    outline: 2px solid #c2d8f2;
-    outline-offset: 2px;
-}
-
-/* General-panel toggle row: title + description on the left, switch pushed to
-   the right edge and vertically centered. Self-contained (doesn't rely on the
-   settings modal's .setting-row/.setting-label) so the title never gets
-   squeezed into a narrow wrapping column. */
-.setting-toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-}
-.setting-toggle-text {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-}
-.setting-toggle-title {
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: #212529;
-}
-.setting-toggle-desc {
-    font-size: 0.8rem;
-    line-height: 1.5;
-    color: #8a8a8a;
-    max-width: 46ch;
-}
-
-/* ====================================================================
-   Menu-button hover popup ("Files" / "Outline" quick switch).
-   Same visual language as .context-menu; positioned from JS just below
-   the titlebar's 40px drag rectangle (drag regions swallow pointer
-   events geometrically — see layout.css titlebar-search notes — so the
-   popup must not overlap it, and carries no-drag as a belt-and-braces).
-   ==================================================================== */
-.menu-popup {
-    position: fixed;
-    z-index: 10000;
-    -webkit-app-region: no-drag;
-    background-color: #f6f6f6;
-    border: 1px solid #dcdcdc;
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-    padding: 4px;
-    min-width: 130px;
-    box-sizing: border-box;
-    font-size: 0.86rem;
-    user-select: none;
-    opacity: 0;
-    transform: translateY(-4px) scale(0.98);
-    pointer-events: none;
-    transition:
-        opacity 0.12s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.menu-popup.show {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    pointer-events: auto;
-}
-
-.menu-popup-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    color: #222222;
-    cursor: pointer;
-    border-radius: 5px;
-    transition: background-color 0.1s ease;
-}
-.menu-popup-item:hover {
-    background-color: rgba(0, 0, 0, 0.06);
-}
-/* currently visible view: matches the tree's selected-row accent */
-.menu-popup-item.active {
-    color: #186cd9;
-    font-weight: 500;
-}
-
-.menu-popup-icon {
-    width: 14px;
-    height: 14px;
-    opacity: 0.7;
-    user-select: none;
-    -webkit-user-drag: none;
 }

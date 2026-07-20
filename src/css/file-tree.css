@@ -1,0 +1,242 @@
+/* ====================================================================
+   File tree.
+
+   Layout principle throughout: rows have ZERO margin and generous padding,
+   so click hit-boxes are continuous down the whole tree with no dead gaps —
+   the visual spacing between rows comes entirely from the inset highlight
+   pill defined in primitives.css, not from the box model.
+   ==================================================================== */
+.file-tree-container {
+    flex: 1;
+    width: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.file-tree-container.hidden {
+    display: none;
+}
+
+/* While a drag is in flight, child elements must not intercept pointer
+   events or the dragover target flickers between a row and its own icon /
+   text node. Folders re-enable it on their label, because a folder IS a
+   valid drop target and needs to receive the event itself. */
+.file-tree-container.tree-dragging .item-label * {
+    pointer-events: none;
+}
+
+.file-tree-container.tree-dragging .tree-item.directory > .item-label {
+    pointer-events: auto;
+}
+
+/* Suppress hover highlighting during a drag: the only highlight that should
+   be visible is the drop-target outline. */
+.file-tree-container.tree-dragging .item-label::before {
+    background-color: transparent !important;
+}
+
+/* ── structure ─────────────────────────────────────────────────────── */
+.tree-list {
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding-left: 12px; /* per-depth indent; also overrides the UA default */
+    list-style: none;
+}
+
+/* The root list is flush — workspace-level items are not indented. */
+.file-tree-container > .tree-list {
+    width: 100%;
+    margin-left: 0;
+    padding: 4px 6px 0 6px;
+    border-left: none;
+}
+
+.tree-item {
+    display: block;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+/* Main clickable label. Vertical padding is what fills the gap between rows;
+   position/z-index/cursor come from primitives.css. */
+.item-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 6px 5px 0;
+    box-sizing: border-box;
+    font-size: 0.9rem;
+    color: var(--st-text);
+    /* The row itself never paints — the ::before pill does. Guarded with
+       !important because several JS paths still set inline backgrounds on
+       rows during drag/selection bookkeeping. */
+    background-color: transparent !important;
+    transition: color var(--st-dur-fast) ease;
+}
+
+/* ── row states ────────────────────────────────────────────────────── */
+/* Neutral hover/context wash lives in primitives.css. Only the accent and
+   focus states are tree-specific. */
+.tree-item.selected > .item-label {
+    font-weight: 500;
+    color: var(--st-accent);
+}
+
+.tree-item.focused-item > .item-label::before {
+    background-color: var(--st-tint-strong);
+}
+
+/* `.selected` must always beat `.focused-item` regardless of which class was
+   applied last. Without this third rule the two above have equal specificity
+   and source order silently decides the winner whenever a row carries both. */
+.tree-item.selected > .item-label::before,
+.tree-item.selected.focused-item > .item-label::before {
+    background-color: var(--st-accent-a12);
+}
+
+.tree-item.dragging {
+    opacity: 0.4;
+}
+
+/* Drop target: tinted fill plus an inset outline, so it reads as a container
+   opening up rather than as just another selected row. */
+.tree-item.directory.drag-over > .item-label::before {
+    background-color: var(--st-accent-a08);
+    outline: 1px solid var(--st-accent);
+    outline-offset: -1px;
+}
+
+/* Reveal-in-sidebar flash: blink the pill a few times after scrolling to a
+   row, so the eye can find it. */
+@keyframes reveal-flash-blink {
+    0%,
+    100% {
+        background-color: var(--st-accent-a12);
+    }
+    50% {
+        background-color: var(--st-accent-a28);
+    }
+}
+
+.item-label.reveal-flash::before {
+    animation: reveal-flash-blink 1s ease-in-out 2;
+}
+
+/* ── icons ─────────────────────────────────────────────────────────── */
+.tree-icon {
+    display: block;
+    width: 12px;
+    height: 12px;
+    opacity: 0.6;
+}
+
+.tree-item.opened > .item-label > .tree-icon {
+    opacity: 0.9;
+}
+
+.tree-item.selected > .item-label > .tree-icon {
+    opacity: 1;
+    filter: var(--st-filter-accent);
+}
+
+/* ── virtual roots (Pinned / Workspace section headers) ─────────────── */
+/* No fill at all — an underline plus a muted, slightly tracked-out label, so
+   they read as section titles rather than as hoverable rows. */
+.tree-item[data-virtual-root="true"] > .item-label {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.tree-item[data-virtual-root="true"] > .item-label > .tree-icon {
+    opacity: 0.9;
+}
+
+.tree-item[data-virtual-root="true"] > .item-label::before {
+    /* !important because the hover/selected rules in primitives.css and above
+       are more specific than this selector and would otherwise re-fill it. */
+    background-color: transparent !important;
+    border-radius: 0;
+    left: 0;
+    right: 0;
+    border-bottom: 1px solid var(--st-hairline-strong);
+}
+
+.tree-item[data-virtual-root="true"] > .item-label .item-text {
+    letter-spacing: 0.04em;
+}
+
+/* ── inline rename field ───────────────────────────────────────────── */
+.tree-inline-input {
+    width: 100%;
+    height: 22px;
+    box-sizing: border-box;
+    margin-left: var(--st-row-inset);
+    padding: 2px 6px;
+    border: 1.5px solid var(--st-focus-ring);
+    border-radius: var(--st-radius-md);
+    outline: none;
+    background-color: var(--st-input-bg);
+    font-family: inherit;
+    font-size: 0.88rem;
+    line-height: 1;
+}
+
+.tree-inline-input::selection {
+    background-color: var(--st-selection-bg);
+}
+
+/* ── subtree guide lines ───────────────────────────────────────────── */
+/* The accordion mechanics live in primitives.css; this is just the vertical
+   hierarchy line down the left of a folder's children. --guide-x is written
+   per depth from file-tree.js so nested folders each get a line at their own
+   indent. */
+.tree-children-inner::before {
+    content: "";
+    position: absolute;
+    left: var(--guide-x, 13px);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--st-hairline-strong);
+    pointer-events: none;
+}
+
+/* Workspace's direct children aren't indented, so there's nothing to guide. */
+.tree-children-root::before {
+    display: none;
+}
+
+/* ── collapse chevron on a folder row ──────────────────────────────── */
+/* Flips 180° rather than 90° (it points down when open, up when closed);
+   the transition itself is shared in primitives.css.
+
+   Opacity note: this is the faintest of the app's four chevrons. The full
+   set, at rest → revealed, is
+       .section-arrow-icon  (10px)  0.4  → 0.8
+       .toc-arrow           (10px)  0.45 → 0.8
+       .toc-ref-arrow        (9px)  0.5  → 0.85
+       .dropdown-arrow-icon (11px)  0.55 → 0.85
+   Four different resting values in 0.05 steps, which is either a deliberate
+   ladder compensating for how prominent each chevron should be, or four
+   independent guesses that never got reconciled. Left alone either way —
+   collapsing it to one pair is a visible change, not a cleanup. */
+.section-arrow-icon {
+    width: 10px;
+    height: 10px;
+    margin-left: auto;
+    opacity: 0.4;
+    transform: rotate(0deg);
+}
+
+.section-arrow-icon.expanded {
+    transform: rotate(-180deg);
+}
+
+.item-label:hover .section-arrow-icon {
+    opacity: 0.8;
+}

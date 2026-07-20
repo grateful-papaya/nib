@@ -1,10 +1,14 @@
 /* ====================================================================
    print.css — global print stylesheet for PDF export.
 
-   Load order: base.css → window.css → editor.css → titlebar.css →
-   dialogs.css → print.css. MUST load last: .editor-title / .cm-* rules here tie
-   with the screen rules in editor.css on specificity and win only by
-   source order.
+   MUST LOAD LAST: the .editor-title / .cm-* rules here tie with the screen
+   rules in editor.css on specificity and win only by source order.
+
+   TOKEN NOTE — this is the one file that deliberately does NOT consume
+   base.css color tokens. Print output has to resolve to absolute black on
+   absolute white regardless of what the screen theme is doing; wiring these
+   to --st-* would mean a future theme change silently altering exported
+   PDFs. The literals below are the point, not an oversight.
    ==================================================================== */
 
 @media print {
@@ -30,23 +34,23 @@
         display: block;
         width: 100%;
         height: auto;
+        margin: 0;
+        padding: 0;
         overflow: visible;
         background: #ffffff;
         color: #000000;
         box-shadow: none;
-        padding: 0;
-        margin: 0;
     }
 
     /* 3. disable transitions and transforms */
     .editor-content-inner {
         display: block;
-        transform: none;
-        transition: none;
         width: 100%;
         height: auto;
-        overflow: visible;
         padding: 0;
+        overflow: visible;
+        transform: none;
+        transition: none;
     }
 
     /* 4. place the title statically at the top of the page */
@@ -54,13 +58,13 @@
         position: static;
         display: block;
         width: 100%;
-        padding: 0;
         margin-top: 10mm;
         margin-bottom: 8mm;
-        font-size: 26pt;
-        font-weight: bold;
-        color: #000000;
+        padding: 0;
         background: transparent;
+        color: #000000;
+        font-size: 26pt;
+        font-weight: 700;
     }
 
     /* 5. release CodeMirror scroll guards so text flows across pages */
@@ -72,15 +76,15 @@
         display: block;
         width: 100%;
         height: auto;
-        overflow: visible;
-        padding: 0;
         margin: 0;
+        padding: 0;
+        overflow: visible;
     }
 
     /* normalize line wrapping and print spacing */
     .cm-line {
-        padding: 0;
         margin: 3px 0;
+        padding: 0;
         word-break: break-word;
         white-space: pre-wrap;
     }
@@ -88,6 +92,6 @@
     /* 6. A4 page size and margins */
     @page {
         size: A4;
-        margin: 20mm 18mm 20mm 18mm;
+        margin: 20mm 18mm;
     }
 }

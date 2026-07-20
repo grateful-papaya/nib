@@ -12,17 +12,28 @@
              each still loads exactly once, in dependency order. -->
         <script type="module" src="js/app.js"></script>
 
+        <!-- Order matches the load-order contract documented in base.css's
+             own header — several rules below rely on source order rather
+             than !important (e.g. print.css must load last), so this list
+             is not alphabetized and should not be re-sorted. -->
         <link rel="stylesheet" href="css/base.css" />
+        <link rel="stylesheet" href="css/primitives.css" />
+        <link rel="stylesheet" href="css/controls.css" />
         <link rel="stylesheet" href="css/window.css" />
         <link rel="stylesheet" href="css/editor.css" />
-        <link rel="stylesheet" href="css/titlebar.css" />
-        <link rel="stylesheet" href="css/dialogs.css" />
-        <link rel="stylesheet" href="css/print.css" />
-        <link rel="stylesheet" href="css/sidebar.css" />
-        <link rel="stylesheet" href="css/settings.css" />
-        <link rel="stylesheet" href="css/components.css" />
         <link rel="stylesheet" href="css/markdown-preview.css" />
+        <link rel="stylesheet" href="css/sidebar.css" />
+        <link rel="stylesheet" href="css/file-tree.css" />
+        <link rel="stylesheet" href="css/toc.css" />
+        <link rel="stylesheet" href="css/titlebar.css" />
+        <link rel="stylesheet" href="css/overlays.css" />
+        <link rel="stylesheet" href="css/components.css" />
+        <link rel="stylesheet" href="css/dialogs.css" />
         <link rel="stylesheet" href="css/scrollbar.css" />
+        <link rel="stylesheet" href="css/settings-shell.css" />
+        <link rel="stylesheet" href="css/settings-fields.css" />
+        <link rel="stylesheet" href="css/settings-backup.css" />
+        <link rel="stylesheet" href="css/print.css" />
     </head>
     <body>
         <div class="window">

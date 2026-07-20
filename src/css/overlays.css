@@ -1,0 +1,240 @@
+/* ====================================================================
+   Floating overlays — context menu, menu popup, tooltips.
+
+   Everything here is position:fixed and lives outside normal layout, which
+   is why it is grouped: these four are siblings in the stacking order, not
+   in the DOM, and their z-indexes only make sense read together (see the
+   --st-z-* scale in base.css).
+   ==================================================================== */
+
+/* ── shared menu surface ─────────────────────────────────────────────
+   .context-menu (right-click) and .menu-popup (the Files/Outline hover
+   switch) were previously two near-identical copies of this block. They
+   differ only in min-width and entry transform, so only those differ below.
+
+   The open/close animation is --st-dropdown-transition from base.css, which
+   this file used to hand-roll one property short. The missing property was
+   `visibility`: at opacity 0 these surfaces were still hit-testable by
+   find-in-page and still exposed to the accessibility tree, so a closed
+   context menu's items were reachable by screen reader. Pairing
+   `visibility: hidden` with a transition (rather than `display: none`) is
+   what lets the fade-out still play before the surface goes inert. */
+.context-menu,
+.menu-popup {
+    position: fixed;
+    z-index: var(--st-z-menu);
+    box-sizing: border-box;
+    padding: 4px;
+    background-color: var(--st-menu-bg);
+    border: 1px solid var(--st-panel-border);
+    border-radius: var(--st-radius);
+    box-shadow: var(--st-shadow-menu);
+    font-size: 0.86rem;
+    user-select: none;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: var(--st-dropdown-transition);
+}
+
+.context-menu.show,
+.menu-popup.show {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.context-menu-item,
+.menu-popup-item {
+    display: flex;
+    align-items: center;
+    border-radius: var(--st-radius-sm);
+    color: var(--st-text);
+    cursor: pointer;
+    transition: background-color var(--st-dur-fast) ease;
+}
+
+.context-menu-item:hover,
+.menu-popup-item:hover {
+    background-color: var(--st-tint-faint);
+}
+
+/* ── context menu ──────────────────────────────────────────────────── */
+.context-menu {
+    min-width: 150px;
+    transform: scale(0.96);
+}
+
+.context-menu.show {
+    transform: scale(1);
+}
+
+.context-menu-item {
+    padding: 6px 12px;
+}
+
+.context-menu-divider {
+    margin: 0;
+    border-top: 1px solid var(--st-tint-faint);
+}
+
+/* display:none already removes the element from hit-testing and painting, so
+   the pointer-events and background overrides that used to accompany it were
+   unreachable.
+
+   REVIEW: `display: none` is a UX decision hiding inside what looks like
+   cleanup. An unavailable item vanishing means the menu changes height and
+   its items change position between right-clicks, so muscle memory for "Paste
+   is third" breaks whenever the clipboard is empty. The conventional
+   treatment is to keep the row, dim it, and make it inert:
+
+       .context-menu-item.disabled {
+           opacity: 0.4;
+           pointer-events: none;
+       }
+
+   Left as-is rather than changed unilaterally, since it is a design call. */
+.context-menu-item.disabled {
+    display: none;
+}
+
+.context-menu-item.delete {
+    color: var(--st-danger-soft);
+}
+
+.context-menu-item.delete:hover {
+    background-color: var(--st-danger-soft-a08);
+}
+
+/* ── menu popup (Files / Outline quick switch) ───────────────────────
+   Positioned from JS just below the titlebar's 40px drag rectangle. Drag
+   regions swallow pointer events geometrically (see the titlebar-search
+   notes in layout.css), so the popup must not overlap it — and carries
+   no-drag itself as belt and braces. */
+.menu-popup {
+    -webkit-app-region: no-drag;
+    min-width: 130px;
+    transform: translateY(-4px) scale(0.98);
+}
+
+.menu-popup.show {
+    transform: translateY(0) scale(1);
+}
+
+.menu-popup-item {
+    gap: 8px;
+    padding: 6px 10px;
+}
+
+/* The currently visible view, matching the tree's selected-row accent.
+
+   REVIEW: the label turns accent-blue but .menu-popup-icon beside it stays
+   flat gray at 70% opacity, so the active row reads as half-highlighted.
+   base.css already carries --st-filter-accent precisely for recoloring a
+   black-on-transparent SVG; the fix is one rule:
+
+       .menu-popup-item.active .menu-popup-icon {
+           filter: var(--st-filter-accent);
+           opacity: 1;
+       }
+
+   Not applied here because it is a visible change and the icon assets may
+   not all be black-on-transparent — verify one before enabling. */
+.menu-popup-item.active {
+    color: var(--st-accent);
+    font-weight: 500;
+}
+
+/* Geometry only; the non-draggable behavior comes from primitives.css. */
+.menu-popup-icon {
+    width: 14px;
+    height: 14px;
+    opacity: 0.7;
+}
+
+/* ── file metadata tooltip ───────────────────────────────────────────
+   Light card, slides in from the left. Sizes are in px rather than rem on
+   purpose: this is chrome that must stay legible and dimensionally stable
+   regardless of the editor's user-configurable font size. */
+.file-meta-tooltip {
+    position: fixed;
+    z-index: var(--st-z-tooltip);
+    min-width: 180px;
+    padding: 10px 14px;
+    background: var(--st-panel-bg);
+    border: 1px solid var(--st-tooltip-border);
+    border-radius: var(--st-radius-panel);
+    box-shadow: var(--st-shadow-tooltip);
+    font-size: 12px;
+    color: var(--st-gray-7);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition:
+        opacity var(--st-dur-quick) ease,
+        transform var(--st-dur-quick) ease;
+}
+
+.file-meta-tooltip.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* 12.5px, not 13px: a half-pixel step is the smallest increment that still
+   reads as "heading" next to the 12px rows without opening a visible gap in
+   the type scale. */
+.fmeta-name {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--st-text);
+    word-break: break-all;
+}
+
+.fmeta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    line-height: 1.8;
+    color: var(--st-text-muted);
+}
+
+.fmeta-row span:first-child {
+    flex-shrink: 0;
+    color: var(--st-text-faint);
+}
+
+/* ── raw-source tooltip ──────────────────────────────────────────────
+   Shows the markdown behind whatever rendered element the pointer is over —
+   i.e. the un-rendered source. Follows the cursor (positioned from JS) and
+   mirrors .file-meta-tooltip's shape, but dark and monospaced so it reads as
+   code rather than as metadata. Sits above the context menu.
+
+   Radius normalized from a one-off 7px to --st-radius (8px); a 1px corner
+   difference between two tooltips was drift, not intent. */
+.raw-source-tooltip {
+    position: fixed;
+    z-index: var(--st-z-raw-tooltip);
+    max-width: 460px;
+    padding: 6px 9px;
+    background: var(--st-tooltip-bg);
+    color: var(--st-tooltip-text);
+    border-radius: var(--st-radius);
+    box-shadow: var(--st-shadow-tooltip-dark);
+    font-family: var(--st-mono);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(3px);
+    transition:
+        opacity var(--st-dur-fast) ease,
+        transform var(--st-dur-fast) ease;
+}
+
+.raw-source-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+}

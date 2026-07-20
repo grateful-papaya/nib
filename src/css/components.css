@@ -1,24 +1,48 @@
 /* ====================================================================
-   Toast notification
+   components.css — toast notification and the save indicator.
+
+   Design tokens (--st-*) come from base.css.
+
+   DEAD-RULE NOTE — this file used to also declare
+       .save-indicator.hidden { display: none }
+       .save-ring   { transition: stroke-dashoffset 0.4s ease }
+       .save-check  { transition: opacity 0.2s ease }
+   All three were unreachable. titlebar.css declares the same things through
+   #save-indicator (an ID, so it wins on specificity no matter the load
+   order), and its versions differ: `.hidden` there animates a max-width
+   collapse instead of display:none, precisely so the adjacent search bar
+   does not jump-resize. The rules here were quietly fighting that and
+   losing. They are removed rather than "fixed", because the ID versions in
+   titlebar.css are the intended behavior — see the comment above
+   #editor-stats there. Only the layout box below is still owned here.
    ==================================================================== */
+
+/* --------------------------------------------------------------------
+   Toast notification
+   --------------------------------------------------------------------
+   Rises into place: `bottom` animates from -10px (just off the bottom edge)
+   to 30px, so it enters from outside the frame rather than fading in place.
+   The window clips it on the way (see the overflow:clip note in window.css,
+   which exists partly because of this element).
+   -------------------------------------------------------------------- */
 .toast-notification {
     position: absolute;
     bottom: -10px;
     left: 50%;
     transform: translateX(-50%);
-    background: #343a40;
-    color: #f8f9fa;
     padding: 12px 24px;
-    border-radius: 100px;
+    background: var(--st-toast-bg);
+    color: var(--st-toast-text);
+    border-radius: var(--st-radius-pill);
+    box-shadow: var(--st-shadow-toast);
     font-size: 1rem;
     font-weight: 500;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
+    z-index: var(--st-z-toast);
     opacity: 0;
     pointer-events: none;
     transition:
-        bottom 0.25s ease,
-        opacity 0.25s ease;
+        bottom var(--st-dur-slow) ease,
+        opacity var(--st-dur-slow) ease;
 }
 
 .toast-notification.show {
@@ -35,41 +59,38 @@
     pointer-events: auto;
 }
 
+/* Lighter than --st-accent: this is the one place an accent has to read
+   against a near-black plate, where the chrome blue goes muddy. */
 .toast-action-btn {
+    padding: 2px 6px;
     background: transparent;
     border: none;
-    color: #74b3ff;
-    font-weight: 700;
-    font-size: 0.95rem;
+    border-radius: var(--st-radius-md);
+    color: var(--st-toast-action);
     font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
     cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 6px;
-    transition: background 0.12s ease;
-}
-.toast-action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    transition: background var(--st-dur-fast) ease;
 }
 
+.toast-action-btn:hover {
+    background: var(--st-toast-action-hover);
+}
+
+/* --------------------------------------------------------------------
+   Save indicator — layout box only
+
+   The draw animation and the collapse-instead-of-hide behavior live in
+   titlebar.css under #save-indicator; see the note at the top of this file.
+   -------------------------------------------------------------------- */
 .save-indicator {
     position: relative;
-    width: 18px;
-    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 2px; /* clears the character-count component beside it */
     pointer-events: none;
-    margin-left: 2px; /* spacing so it sits next to the character-count component */
-}
-
-.save-indicator.hidden {
-    display: none;
-}
-
-.save-ring {
-    transition: stroke-dashoffset 0.4s ease;
-}
-
-.save-check {
-    transition: opacity 0.2s ease;
 }

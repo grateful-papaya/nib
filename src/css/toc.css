@@ -1,0 +1,322 @@
+/* ====================================================================
+   Outline (TOC) panel — a second "sidebar" stacked over the file tree.
+
+   Absolutely positioned inside .sidebar and moved with transform, so
+   showing/hiding it never touches layout: the tree underneath keeps its
+   exact scroll position and width, and the switch reads as a new sidebar
+   sliding in over the old one. It stops one footer-height short of the
+   bottom so the footer stays visible and clickable in both views.
+
+   The transform transition is what animates tree ⇄ outline switches. When
+   the sidebar is opening from — or collapsing to — width 0, toc.js suppresses
+   this transition (snapPanel) so the width animation runs alone; otherwise
+   the panel would slide and resize simultaneously, which reads as a smear.
+   ==================================================================== */
+.sidebar-toc-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: var(--st-footer-h);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    background: var(--st-tree-bg); /* same surface: reads as its own bar */
+    /* Redraws the footer divider (.sidebar::after) that this panel covers. */
+    border-bottom: 1px solid var(--st-hairline);
+    /* Above tree rows and the sidebar's ::after divider. No upper bound is
+       needed against the footer — the panel simply ends above it. */
+    z-index: var(--st-z-toc-panel);
+    transform: translateX(-100%);
+    transition: transform var(--st-slide-transition);
+    /* A hidden panel must never eat tree clicks: the sidebar's overflow clips
+       it visually, but it still exists at negative X during the slide-out. */
+    pointer-events: none;
+}
+
+.sidebar.toc-open .sidebar-toc-panel {
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+/* Header row, sized to match .sidebar-action-group exactly so the two panels'
+   divider lines stay aligned throughout the slide. Both now read the same
+   --st-action-row-h token instead of each writing 38px and hoping. */
+.toc-header {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: var(--st-action-row-h);
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-top: 1px solid var(--st-hairline);
+    border-bottom: 1px solid var(--st-hairline);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--st-text-soft);
+    user-select: none;
+}
+
+.toc-list-container {
+    flex: 1;
+    /* min-height:0 lets the list scroll inside its section instead of
+       expanding the section past the split. */
+    min-height: 0;
+    /* Matches .file-tree-container so highlight pills start at the same x. */
+    padding: 4px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Thin native scrollbar for now; to switch to the custom overlay, add
+       .custom-scroll here and call attachScrollbar() like the other
+       containers do. */
+    scrollbar-width: thin;
+}
+
+/* ====================================================================
+   Outline rows.
+
+   Same pill as the file tree (geometry in primitives.css) but INSET per
+   depth rather than edge-to-edge: the indent comes from the container
+   (.toc-children-inner padding-left), so the pill shifts right with its row
+   and hugs just inside the guide line. Deliberately unlike the flat tree and
+   References lists — it keeps the outline's hierarchy legible on hover.
+   ==================================================================== */
+.toc-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px;
+    font-size: 0.88rem;
+    color: var(--st-text);
+    transition: color var(--st-dur-fast) ease;
+}
+
+.toc-item.active {
+    color: var(--st-accent);
+    font-weight: 500;
+}
+
+.toc-item.active::before {
+    background-color: var(--st-accent-a12);
+}
+
+/* Collapse chevron. Rotation and transition are shared in primitives.css;
+   the enlarged hit target is the .toc-toggle wrapper below, not this img.
+   (On the four-way resting-opacity spread across the app's chevrons, see the
+   note above .section-arrow-icon in file-tree.css.) */
+.toc-arrow {
+    width: 10px;
+    height: 10px;
+    opacity: 0.45;
+}
+
+.toc-item:hover .toc-arrow {
+    opacity: 0.8;
+}
+
+/* Enlarged, obviously-clickable collapse control wrapping the arrow. A bare
+   10px arrow was easy to miss, which read as "folding doesn't work".
+   Radius normalized from a one-off 4px to --st-radius-xs (3px); a 16px box
+   does not need its own corner value. */
+.toc-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--st-radius-xs);
+    cursor: pointer;
+}
+
+.toc-toggle:hover {
+    background-color: var(--st-tint-heavy);
+}
+
+/* Leaf headings get a spacer the width of the toggle so their text aligns
+   with siblings that do have one — mirrors how tree files align with
+   folders. (The old 10px declaration was dead: a second 16px rule later in
+   the file always overrode it. 16px is the correct value — it matches
+   .toc-toggle, not the bare arrow.) */
+.toc-arrow-spacer {
+    flex-shrink: 0;
+    width: 16px;
+}
+
+/* Child container: reuses the tree's grid accordion including its guide
+   line. The padding-left is what indents each depth AND, because the row
+   shifts with it, is what makes the pill sit inset. --guide-x puts the line
+   a touch left of the row's arrow. */
+.toc-children-inner {
+    padding-left: 13px;
+    --guide-x: 11px;
+}
+
+/* ====================================================================
+   Outline / References split.
+
+   The panel is a flex column of: outline section (definite height, driven by
+   --toc-split), the drag bar, then the references section filling the rest.
+   Each section is its own flex column (header + scrolling list); min-height:0
+   is what lets the inner list scroll rather than push the section open.
+   ==================================================================== */
+.toc-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.toc-outline-section {
+    /* Default: a little over half the panel, so the outline gets the
+       majority of the space but References is visible without dragging. */
+    height: var(--toc-split, 58%);
+    flex: 0 0 auto;
+}
+
+.toc-references-section {
+    flex: 1 1 auto;
+}
+
+/* The drag bar already draws the divider above References, so drop the
+   header's own top border there to avoid a doubled line. */
+.toc-references-section .toc-header {
+    border-top: none;
+}
+
+/* ====================================================================
+   Horizontal drag bar — the same control as .sidebar-resizer, rotated 90°.
+
+   A permanent centered hairline (::before) plus the shared guide band
+   (::after, primitives.css) that lights up on hover / while dragging. Only
+   the axis and the two states are below.
+   ==================================================================== */
+.toc-vsplit {
+    position: relative;
+    flex: 0 0 auto;
+    height: var(--st-grab);
+    cursor: row-resize;
+    /* above rows, so bar and corner stay grabbable */
+    z-index: var(--st-z-vsplit);
+}
+
+.toc-vsplit::before,
+.toc-vsplit::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+}
+
+.toc-vsplit::before {
+    height: 1px;
+    background: var(--st-hairline);
+    transform: translateY(-50%);
+}
+
+/* Horizontal band, collapsed at rest. */
+.toc-vsplit::after {
+    height: var(--st-grab);
+    transform: translateY(-50%) scaleY(0);
+}
+
+/* Hovering the corner lights this too — the corner is a child, so :hover
+   propagates to the bar. */
+.toc-vsplit:hover::after {
+    transform: translateY(-50%) scaleY(0.5);
+    background-color: var(--st-guide-soft);
+}
+
+.sidebar-toc-panel.splitting .toc-vsplit::after {
+    transform: translateY(-50%) scaleY(0.5);
+    background-color: var(--st-guide);
+    transition: none;
+}
+
+/* Corner zone at the bar's right end, over the sidebar's right edge —
+   grabbing it drives the split ratio (Y) and the sidebar width (X) together.
+   Deliberately draws NOTHING: the nwse-resize cursor is the whole affordance,
+   which keeps the divider a single clean line. */
+.toc-vsplit-corner {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    transform: translateY(-50%);
+    cursor: nwse-resize;
+    z-index: var(--st-z-vsplit-corner);
+}
+
+/* ====================================================================
+   References list — Links / Documents / Images.
+   ==================================================================== */
+/* Group header. Same muted small-caps voice as .toc-header, scaled down to a
+   row label. The whole header is the collapse toggle (chevron + label), so it
+   is a clickable flex row rather than a plain text line. */
+.toc-ref-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 6px 3px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--st-text-faint);
+    cursor: pointer;
+    user-select: none;
+}
+
+.toc-ref-group:hover {
+    color: var(--st-text-soft);
+}
+
+.toc-ref-group:first-child {
+    padding-top: 3px;
+}
+
+/* Smaller and tighter than the outline's chevron: the whole header row is the
+   hit target here, so the arrow is purely an indicator. */
+.toc-ref-arrow {
+    width: 9px;
+    height: 9px;
+    opacity: 0.5;
+}
+
+.toc-ref-group:hover .toc-ref-arrow {
+    opacity: 0.85;
+}
+
+/* Group body: reuses the tree's grid accordion (the wrapper class is added in
+   JS) but stays flat and edge-to-edge — no indent, no guide line, unlike
+   .toc-children-inner. Sizing is in primitives.css. */
+
+/* Rows: [label] on the left (accent, monospace), destination dimmed and
+   ellipsized on the right. Same pill as everything else. Both cells
+   ellipsize via the truncating-label primitive; only the destination is
+   flexible, so only it takes the flex tier. */
+.toc-ref-item {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 6px;
+}
+
+.toc-ref-label {
+    flex-shrink: 0;
+    max-width: 55%;
+    color: var(--st-accent);
+    font-family: var(--st-mono);
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.toc-ref-dest {
+    color: var(--st-text-soft);
+    font-size: 0.8rem;
+}

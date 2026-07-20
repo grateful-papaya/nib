@@ -1,13 +1,8 @@
 /* ====================================================================
-   window.css — window frame, titlebar chrome, global button base,
+   window.css — window frame, titlebar plate, global button base,
    welcome screen.
 
    Design tokens (--st-*) live in base.css and must load before this.
-
-   Load order: base.css → window.css → editor.css → titlebar.css →
-   dialogs.css → print.css. (print.css must come last: several of its
-   rules tie with screen rules on specificity and win only by source
-   order.)
    ==================================================================== */
 
 /* --------------------------------------------------------------------
@@ -18,8 +13,9 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: rgb(248, 248, 248);
-    border-radius: 16px;
+    box-sizing: border-box;
+    background: var(--st-window-bg);
+    border-radius: var(--st-radius-lg);
     /* clip, not hidden: still clips the custom frame corners (clip respects
        border-radius exactly like hidden), but the box is no longer a scroll
        container — so scrollIntoView()/focus() from descendants (sidebar tree
@@ -28,8 +24,7 @@
        that revealInSidebar's old scrollIntoView actually consumed, shifting
        everything inside the window up with no way back. */
     overflow: clip;
-    box-sizing: border-box;
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--st-shadow-window-inset);
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
 }
@@ -39,38 +34,43 @@
 .window.squared {
     border-radius: 0 !important;
 }
+
 .window.squared .window-controls {
     border-top-left-radius: 0 !important;
     border-top-right-radius: 0 !important;
 }
 
 /* --------------------------------------------------------------------
-   Title bar
+   Title bar plate
    -------------------------------------------------------------------- */
+/* The gradient is a top-edge shade over the flat plate color, not a full
+   fade: it darkens only the first 40% so the titlebar has a lit edge without
+   the whole bar reading as a gradient. */
 .window-controls {
     position: relative;
-    flex-shrink: 0;
     display: flex;
     align-items: center;
-    height: 40px;
+    flex-shrink: 0;
+    height: var(--st-titlebar-h);
     padding: 0 12px;
     gap: 8px;
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
     box-sizing: border-box;
+    border-top-left-radius: var(--st-radius-lg);
+    border-top-right-radius: var(--st-radius-lg);
     background:
         linear-gradient(
             to bottom,
-            rgba(0, 0, 0, 0.05) 0%,
-            rgba(0, 0, 0, 0) 40%,
-            transparent 100%
+            var(--st-tint-subtle) 0%,
+            transparent 40%
         ),
-        #f0f0f0;
-    z-index: 1005;
+        var(--st-titlebar-bg);
+    z-index: var(--st-z-titlebar);
     -webkit-app-region: drag;
 }
 
-/* interactive titlebar children opt out of the drag region individually */
+/* Interactive titlebar children opt out of the drag region individually —
+   -webkit-app-region does not inherit, and a drag rectangle swallows pointer
+   events geometrically. */
 .window-btn,
 .editor-stats,
 #save-indicator {
@@ -79,46 +79,49 @@
 
 /* --------------------------------------------------------------------
    Shared title-bar button base
+
    Specificity note: button[type="button"] is (0,1,1) — heavier than any
    single-class selector (0,1,0). Component rules that need to override
    this base (e.g. .titlebar-path-info-btn, .titlebar-replace-action)
    do it by repeating a class or parent-prefixing, NOT by source order.
    -------------------------------------------------------------------- */
 button[type="button"] {
-    cursor: pointer;
-    transition:
-        background-color 0.2s ease,
-        opacity 0.2s ease;
     background: transparent;
     opacity: 0.6;
+    cursor: pointer;
+    transition:
+        background-color var(--st-dur-accordion) ease,
+        opacity var(--st-dur-accordion) ease;
 }
+
 button[type="button"]:hover {
-    background-color: #d0d0d0;
+    background-color: var(--st-btn-hover);
     opacity: 1;
 }
 
-/* title-bar button layout (more specific than button[type="button"]) */
+/* Title-bar button layout (more specific than button[type="button"]). */
 .window-btn {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    flex-shrink: 0; /* keep button shape when the window shrinks */
+    width: var(--st-btn-size);
+    height: var(--st-btn-size);
+    padding: 0;
     box-sizing: border-box;
     border: none;
     border-radius: 50%;
-    padding: 0;
-    flex-shrink: 0; /* keep button shape when the window shrinks */
 }
+
 .window-btn img {
     width: 40%;
     height: 40%;
 }
 
-/* quit button hover emphasis */
+/* The one button whose hover is a warning rather than a highlight. */
 #quit-btn:hover {
-    background-color: #e86060;
+    background-color: var(--st-quit-hover);
 }
 
 /* --------------------------------------------------------------------
@@ -133,57 +136,62 @@ button[type="button"]:hover {
    -------------------------------------------------------------------- */
 .welcome-container {
     display: flex;
-    width: 100%;
-    height: 100%;
     align-items: center;
     justify-content: center;
-    /* blend with the default window background */
-    background: transparent;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* blend with the window background */
 }
 
-/* box wrapping the action buttons */
 .welcome-action-box {
     display: flex;
     gap: 24px;
 }
 
-/* button toned to match the title bar and sidebar */
+/* These cards are the only thing on screen when no document is open, so they
+   carry the whole composition — hence their own cool-gray family rather than
+   the chrome surfaces, and a three-stage lift on hover/press. */
 .welcome-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 12px;
     width: 160px;
     height: 160px;
     background-color: var(--st-white);
-    border: 1px solid #e4e6eb; /* soft border matching surrounding UI */
-    border-radius: 16px;
-    color: #4a4a4a; /* dark gray for text readability */
+    border: 1px solid var(--st-tooltip-border);
+    border-radius: var(--st-radius-lg);
+    color: var(--st-welcome-ink);
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    box-shadow: var(--st-shadow-welcome);
     transition:
-        background-color 0.2s var(--st-ease-spring),
-        transform 0.2s var(--st-ease-spring),
-        box-shadow 0.2s var(--st-ease-spring);
-    gap: 12px;
+        background-color var(--st-dur-accordion) var(--st-ease-spring),
+        transform var(--st-dur-accordion) var(--st-ease-spring),
+        box-shadow var(--st-dur-accordion) var(--st-ease-spring);
 }
+
 .welcome-btn:hover {
-    background-color: #f5f6f7;
-    border-color: #d1d4db;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+    background-color: var(--st-welcome-bg-hover);
+    border-color: var(--st-welcome-border-hover);
+    box-shadow: var(--st-shadow-welcome-hover);
 }
+
+/* Rises on press rather than sinking: the card is being picked up, not
+   pushed in. */
 .welcome-btn:active {
     transform: translateY(-1px);
-    background-color: #eceef1;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+    background-color: var(--st-welcome-bg-active);
+    box-shadow: var(--st-shadow-welcome-active);
 }
 
 .welcome-btn-icon {
     width: 36px;
     height: 36px;
     opacity: 0.65;
-    transition: opacity 0.1s ease;
+    transition: opacity var(--st-dur-fast) ease;
 }
+
 .welcome-btn:hover .welcome-btn-icon {
     opacity: 0.9;
 }

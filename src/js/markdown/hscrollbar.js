@@ -38,6 +38,32 @@ const MIN_THUMB = 24;
 const FADE_AFTER = 1000;
 const NEAR_PAD = 14; // px above the bar strip that counts as "near"
 
+// Coalesce a high-frequency handler (mousemove, resize) to one call per frame,
+// always with the most recent arguments. Lives here because the two owners of a
+// floating bar — the table widget and the fenced-code plugin — are the ones
+// routing those events in.
+export function rafThrottle(fn) {
+  let queued = false;
+  let args = null;
+  const run = () => {
+    queued = false;
+    const a = args;
+    args = null;
+    if (a) fn(...a);
+  };
+  const wrapped = (...a) => {
+    args = a;
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(run);
+  };
+  wrapped.cancel = () => {
+    queued = false;
+    args = null;
+  };
+  return wrapped;
+}
+
 export function createHBar({ container, onDrag }) {
   const thumb = document.createElement("div");
   thumb.className = "cm-md-hbar-thumb";

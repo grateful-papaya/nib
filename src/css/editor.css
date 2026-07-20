@@ -3,13 +3,22 @@
    CodeMirror layout overrides, image viewer, reading mode, editor
    context-menu submenu.
 
-   Load order: base.css → window.css → editor.css → titlebar.css →
-   dialogs.css → print.css. Design tokens (--st-*) come from base.css.
+   Design tokens (--st-*) come from base.css.
+
+   MERGE NOTE — editor-chrome.css is gone; its contents are folded in here
+   (§ "CodeMirror host"). That file's own header instructed exactly this
+   ("if the project already has an editor.css, this file's contents should
+   be folded into it"), and keeping it separate was actively harmful: it
+   declared a SECOND set of defaults for --editor-font-size /
+   --editor-line-height (16px / 1.6) while the rule below declared its own
+   fallbacks (1rem / 1.6). Two defaults for one variable, in two files, is a
+   bug waiting for someone to change the wrong one. There is now exactly one
+   declaration site.
 
    Specificity note: the long `.window .app-container .editor-body …`
    descendant selectors are deliberate — they must outweigh both
-   CodeMirror's injected styles and markdown-preview.css. Do not
-   shorten them.
+   CodeMirror's injected styles and markdown-preview.css. Do not shorten
+   them.
    ==================================================================== */
 
 /* --------------------------------------------------------------------
@@ -18,82 +27,84 @@
 .app-container {
     flex: 1;
     display: flex;
-    overflow: hidden;
     min-height: 0;
+    overflow: hidden;
 }
 
 .content {
     flex: 1;
     display: flex;
-    overflow: hidden;
     min-height: 0;
+    overflow: hidden;
 }
 
 .main-tab-content {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
-    box-sizing: border-box;
-    padding: 0;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 .file-editor-container {
+    position: relative;
     display: flex;
     flex-direction: column;
-    width: 100%;
     flex: 1;
+    width: 100%;
     min-height: 0;
-    box-sizing: border-box;
     padding: 0;
+    box-sizing: border-box;
     overflow: hidden;
-    position: relative;
     overscroll-behavior-y: none;
 }
+
 .file-editor-container > * {
-    transition: transform 0.4s var(--st-ease-spring);
+    transition: transform var(--st-dur-pane) var(--st-ease-spring);
     will-change: transform;
 }
 
 /* --------------------------------------------------------------------
    Editor title + body
    -------------------------------------------------------------------- */
-/* title input: transparent background, no border/outline */
+/* Title input: transparent, borderless, absolutely placed over the scroller's
+   top padding. */
 .editor-title {
     position: absolute;
-    top: 40px; /* offset from the top of the scroller */
+    top: var(--st-titlebar-h); /* offset from the top of the scroller */
     left: 0;
     right: 0;
     width: 100%;
-    border: none;
-    background: transparent;
-    padding: 40px var(--editor-padding, 12%); /* synced with the padding slider */
     margin: 0;
+    padding: 40px var(--editor-padding, 12%); /* synced with the padding slider */
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
     font-size: 1.8rem;
     /* 750: the document title should out-weigh an h1 (700) without jumping all
        the way to the 800 that **strong** now owns. Only reachable because the
        @font-face declares the full wght range — see base.css. */
     font-weight: 750;
-    outline: none;
-    font-family: inherit;
-    box-sizing: border-box;
-    z-index: 10; /* above the body text layer */
+    z-index: var(--st-z-editor-title);
 }
 
-/* body text area: transparent, borderless, scrollable */
+/* Body text area: transparent, borderless, scrollable. */
 .editor-body {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    flex: 1;
     width: 100%;
-    border: none;
-    background: transparent;
-    padding: 0;
+    min-height: 0;
     margin: 0;
-    font-family: inherit;
+    padding: 0;
+    border: none;
     outline: none;
+    background: transparent;
+    font-family: inherit;
 }
 
 .editor-spacer {
@@ -101,29 +112,67 @@
 }
 
 .editor-content-inner {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    width: 100%;
+    min-height: 0;
     will-change: transform; /* pre-allocate a GPU layer */
     transform: translateY(0);
-    transition: transform 0.4s var(--st-ease-spring);
+    transition: transform var(--st-dur-pane) var(--st-ease-spring);
+}
+
+/* --------------------------------------------------------------------
+   CodeMirror host
+
+   Folded in from editor-chrome.css. These are the two rules that have to
+   sit on the HOST element (#editor-body) rather than on the descendant
+   selectors below.
+   -------------------------------------------------------------------- */
+
+/* CodeMirror draws its own focus outline on both the editor shell and the
+   focused content; suppressed because the editor fills the pane and the ring
+   would trace the whole window. */
+.editor-body .cm-editor,
+.editor-body .cm-focused {
+    outline: none;
+}
+
+/* User-adjustable typography, written from settings (UIManager's
+   applyEditorFontSize / applyEditorLineSpacing set these on #editor-body in
+   app.js). Declared on the host so anything inside the editor can read them.
+   THE ONLY declaration site — the consumers below read them without
+   restating a fallback, so there is one default, not two. */
+#editor-body {
+    --editor-font-size: 1rem;
+    --editor-line-height: 1.6;
+}
+
+/* CodeMirror sets font-size and line-height inline on .cm-content and
+   .cm-gutters as part of its own measurement pass, so !important is the only
+   way to hand control back to the variables above. Both must be overridden
+   together or the gutter's line boxes desync from the content's and the line
+   numbers drift out of alignment down the document. */
+#editor-body .cm-content,
+#editor-body .cm-gutters {
+    font-size: var(--editor-font-size) !important;
+    line-height: var(--editor-line-height) !important;
 }
 
 /* --------------------------------------------------------------------
    CodeMirror 6 layout overrides
    -------------------------------------------------------------------- */
 .window .app-container .editor-body .cm-editor {
-    flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
+    flex: 1;
+    min-height: 0;
     background: transparent;
 }
 
-/* keep scroller full width so the scrollbar pins right */
+/* Keep the scroller full width so the scrollbar pins right. */
 .window .app-container .editor-body .cm-scroller {
+    position: relative; /* positioning context for the absolute title input */
     /* Vertical only. `overflow: auto` also opened a HORIZONTAL pan on the
        whole editor, and this selector outweighs markdown-preview.css's
        `.cm-editor .cm-scroller { overflow-x: hidden }` — so a long code
@@ -144,21 +193,12 @@
        selection. */
     padding-left: var(--editor-padding, 12%);
     padding-right: var(--editor-padding, 12%);
-    padding-top: 150px; /* top padding accounting for the title height */
-    position: relative; /* positioning context for the absolute title input */
+    padding-top: 150px; /* clears the absolutely-placed title */
     box-sizing: border-box;
 }
 
-/* apply the padding variable only to the text layer */
 .window .app-container .editor-body .cm-content {
     font-family: inherit;
-    /* Both fed by the settings sliders: UIManager.applyEditorFontSize /
-       applyEditorLineSpacing set --editor-font-size / --editor-line-height on
-       #editor-body (app.js), and this rule is what actually consumes them —
-       before this the two sliders were dead, only --editor-padding worked.
-       Fallbacks are the defaults shown in the settings panel. */
-    font-size: var(--editor-font-size, 1rem);
-    line-height: var(--editor-line-height, 1.6);
     /* Korean line-breaking: keep-all breaks only at spaces (no wraps in the
        middle of a Korean word unit), which is the single biggest readability
        win for Korean body copy. overflow-wrap backstops the one failure
@@ -185,7 +225,7 @@
     width: 100%;
 }
 
-/* reset any per-line padding */
+/* Reset any per-line padding. */
 .window .app-container .editor-body .cm-line {
     padding-left: 0;
     padding-right: 0;
@@ -195,42 +235,44 @@
     display: none;
 }
 
-/* remove the active-line highlight */
+/* Remove the active-line highlight. */
 .window .app-container .editor-body .cm-activeLine {
     background-color: transparent;
 }
 
 /* --------------------------------------------------------------------
-   CodeMirror 6 selection color (accent blue)
+   CodeMirror 6 selection color
+
+   Chrome accent, not the content blue: a selection is an editor affordance,
+   not part of the document. Unfocused sits at 18% so an inactive selection
+   stays visible without competing with the focused pane.
    -------------------------------------------------------------------- */
-/* selection background when the editor is not focused */
 .window .app-container .editor-body .cm-editor .cm-selectionBackground {
     background-color: rgba(var(--st-accent-rgb), 0.18);
 }
 
-/* selection background when the editor is focused */
 .window
     .app-container
     .editor-body
     .cm-editor.cm-focused
     .cm-selectionBackground {
-    background-color: rgba(var(--st-accent-rgb), 0.28);
+    background-color: var(--st-accent-a28);
 }
 
-/* override native ::selection styling */
+/* Override native ::selection styling. */
 .window .app-container .editor-body .cm-editor ::selection {
-    background-color: rgba(var(--st-accent-rgb), 0.28);
+    background-color: var(--st-accent-a28);
 }
 
 /* --------------------------------------------------------------------
    Image viewer
    -------------------------------------------------------------------- */
 .image-viewer-container {
-    width: 100%;
-    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 100%;
+    height: 100%;
     background-color: transparent; /* sync with the system theme */
     overflow: hidden; /* keep the image from overflowing while dragging */
 }
@@ -239,12 +281,12 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--st-shadow-float);
 }
 
 /* id-level .hidden guards: defensive against possible id-specificity
    display rules from other stylesheets that the generic .hidden utility
-   (0,1,0) could not beat */
+   (0,1,0) could not beat. */
 #image-viewer.hidden,
 #file-editor.hidden,
 #welcome-message.hidden {
@@ -255,32 +297,32 @@
    Reading mode
    -------------------------------------------------------------------- */
 #read-mode-btn.active {
-    background-color: transparent; /* theme blue transparency mapping */
+    background-color: transparent;
 }
 
-.file-editor-container.reading-mode .editor-title {
-    cursor: default;
-}
+.file-editor-container.reading-mode .editor-title,
 .file-editor-container.reading-mode .cm-content {
     cursor: default;
 }
 
-/* enlarge only the read-mode button */
+/* Larger than the other titlebar buttons: this one is toggled far more often
+   than the window controls beside it. */
 #read-mode-btn {
-    width: 28px; /* expand the clickable area */
-    height: 28px;
+    width: var(--st-btn-size);
+    height: var(--st-btn-size);
 }
+
 #read-mode-btn.active:hover {
-    background-color: #d0d0d0;
+    background-color: var(--st-btn-hover);
     opacity: 0.6;
 }
 
-/* enlarge only the read-mode icon */
 #read-mode-btn img {
     width: 50%;
     height: 50%;
-    transition: transform 0.15s ease;
+    transition: transform var(--st-dur-quick) ease;
 }
+
 #read-mode-btn:hover img {
     transform: scale(1.05);
 }
@@ -309,5 +351,5 @@
    own center doesn't shift relative to the coordinates JS just gave it.
    Only the stack order needs raising, so a submenu paints over its parent. */
 .context-submenu {
-    z-index: 10001;
+    z-index: var(--st-z-submenu);
 }

@@ -1,41 +1,43 @@
 // state/uiState.js
 // Transient UI state: sidebar open/width, the context-menu target, and the
-// custom scrollbar drag flag.
-// Was: window.app.state.ui.* , window.app.scrollbarDragging
-// (Tree-selection DOM caches live in file-tree.js — used only there.)
+// pointer-drag flags. Tree-selection DOM caches deliberately live in
+// file-tree.js, since nothing outside that module reads them.
 
-let sidebarOpen = true;
-let sidebarWidth = "250px";
-let scrollbarDragging = false;
-let settingsSliderDragging = false;
+const DEFAULT_SIDEBAR_WIDTH = "250px";
 
-// Kept as one object so the sidebar can set .targetPath / .targetElement
-// together via a live reference (getContextMenu().targetPath = ...).
+const state = {
+  sidebarOpen: true,
+  sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+  // True while dragging an actual scrollbar thumb (any of them).
+  scrollbarDragging: false,
+  // True while dragging a settings-panel slider (font size / line spacing /
+  // padding). Kept distinct from scrollbarDragging so grabbing a scrollbar
+  // inside the settings panel isn't mistaken for a slider drag, or vice versa.
+  settingsSliderDragging: false,
+};
+
+// One object, handed out by live reference, so the sidebar can set
+// .targetPath / .targetElement together: getContextMenu().targetPath = ...
 const contextMenu = { targetPath: null, targetElement: null };
 
-export const getSidebarOpen = () => sidebarOpen;
-export function setSidebarOpen(v) {
-  sidebarOpen = v;
-}
+export const getSidebarOpen = () => state.sidebarOpen;
+export const setSidebarOpen = (v) => {
+  state.sidebarOpen = !!v;
+};
 
-export const getSidebarWidth = () => sidebarWidth;
-export function setSidebarWidth(w) {
-  sidebarWidth = w;
-}
+export const getSidebarWidth = () => state.sidebarWidth;
+export const setSidebarWidth = (w) => {
+  state.sidebarWidth = w || DEFAULT_SIDEBAR_WIDTH;
+};
 
-// True while the user is dragging an actual scrollbar thumb (any of them).
-export const isScrollbarDragging = () => scrollbarDragging;
-export function setScrollbarDragging(v) {
-  scrollbarDragging = v;
-}
+export const isScrollbarDragging = () => state.scrollbarDragging;
+export const setScrollbarDragging = (v) => {
+  state.scrollbarDragging = !!v;
+};
 
-// True while the user is dragging one of the settings-panel sliders
-// (font size / line spacing / padding). Distinct from scrollbarDragging so
-// grabbing a settings-panel scrollbar thumb doesn't get treated as a slider
-// drag, and vice versa.
-export const isSettingsSliderDragging = () => settingsSliderDragging;
-export function setSettingsSliderDragging(v) {
-  settingsSliderDragging = v;
-}
+export const isSettingsSliderDragging = () => state.settingsSliderDragging;
+export const setSettingsSliderDragging = (v) => {
+  state.settingsSliderDragging = !!v;
+};
 
 export const getContextMenu = () => contextMenu;
