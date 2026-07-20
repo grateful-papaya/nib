@@ -18,6 +18,7 @@ export function createDecorations({
   t,
   MarkerWidget,
   GlyphWidget,
+  ColorSwatchWidget,
 }) {
   const mdHighlight = HighlightStyle.define([
     { tag: t.heading1, class: "cm-md-h1" },
@@ -86,6 +87,12 @@ export function createDecorations({
   // so URL-less "links" are un-styled here with a mark instead.
   const notLinkDeco = Decoration.mark({ class: "cm-md-not-link" });
 
+  // ==marked text==. The grammar node carries no highlight style (see
+  // md-extensions.js), so the ink comes from this mark instead. It covers the
+  // whole node, delimiters included, which is what makes the marker stay
+  // continuous while the "==" is revealed.
+  const highlightDeco = Decoration.mark({ class: "cm-md-highlight" });
+
   // List markers (bullets + computed ordered numbers) are rendered by REPLACING
   // the literal marker text with a widget. A widget reserves exactly the
   // rendered width (so a hierarchical "1.2.5" never overflows into the text)
@@ -99,6 +106,19 @@ export function createDecorations({
   // Arrow / comparison glyph substitution; ~15 distinct outputs in practice.
   const glyphDeco = cached(
     (glyph) => Decoration.replace({ widget: new GlyphWidget(glyph) }),
+  );
+
+  // #tag, painted as an accent pill. A MARK, not a replace: the "#" stays in
+  // the document and stays visible, because it IS the syntax here — hiding it
+  // would leave a pill whose text no longer matches what tag: search matches.
+  // Covers the "#" too, so the pill reads as one continuous chip.
+  const tagDeco = Decoration.mark({ class: "cm-md-tag" });
+
+  // Color chip before a color literal. side:-1 keeps it left of the literal
+  // and, being a widget rather than a replace, it never competes with the
+  // caret for the literal's own positions.
+  const colorSwatchDeco = cached((color) =>
+    Decoration.widget({ widget: new ColorSwatchWidget(color), side: -1 }),
   );
 
   // Blockquote line, keyed by (depth, first, last). `depth` thin bars are drawn
@@ -149,12 +169,18 @@ export function createDecorations({
     hideDeco,
     emphMarkDeco,
     notLinkDeco,
+    highlightDeco,
     markerDeco,
     glyphDeco,
+    tagDeco,
+    colorSwatchDeco,
     quoteLineDeco,
 
     hrLineDeco: line("cm-md-hr"),
     listLineDeco: line("cm-md-list-line"),
+    // A "[^label]: …" line: indented and set slightly smaller, so a run of
+    // definitions reads as apparatus rather than body copy.
+    footnoteDefDeco: line("cm-md-footnote-def"),
     // Collapses a (now-empty) fence line in rendered mode so it adds no height.
     fenceLineDeco: line("cm-md-fence-line"),
 

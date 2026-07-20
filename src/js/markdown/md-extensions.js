@@ -1,10 +1,17 @@
-// smart-table.js
+// md-extensions.js
 //
-// Markdown block-parser extensions for the live preview: a backtick-only fenced
-// code variant and a pipe-aware GFM table parser. Both are pure lezer/markdown
-// extension descriptors — they operate on the parse context passed in at parse
-// time and depend on nothing from the CodeMirror bundle, so no factory is
-// needed. Consumed by getMarkdownExtensions() in markdown-preview.js.
+// Every lezer/markdown grammar extension Nib adds on top of GFM:
+//
+//   backtickOnlyFence  fenced code that ignores "~~~"
+//   smartTable         pipe-aware table parser that tolerates image widths
+//   highlight          ==marked text==
+//   footnotes          [^label] references and [^label]: definitions
+//
+// All of them are pure extension descriptors — they operate on the parse
+// context handed in at parse time and depend on nothing from the CodeMirror
+// bundle, so no factory is needed. The nodes they define carry no highlight
+// style: scanner.js decorates them by node name, the same way it handles the
+// built-in marks. Consumed by getMarkdownExtensions() in markdown-preview.js.
 
 export const backtickOnlyFence = {
   parseBlock: [
@@ -215,4 +222,83 @@ export const smartTable = {
     },
   ],
   remove: ["Table"],
+};
+
+// ── Highlight: ==marked text== ────────────────────────────────────────────
+// Modeled on @lezer/markdown's own Strikethrough: a two-character delimiter
+// resolved by the shared emphasis machinery, so nesting, escaping and
+// "can this open/close here" all behave exactly like ** and ~~ do.
+//
+// The flanking rules are what keep prose safe: "a == b" has whitespace on both
+// sides, so the run can neither open nor close and stays literal text. Only a
+// delimiter tight against the marked text ("==like this==") forms a node.
+const PUNCTUATION =
+  /[!"#$%&'()*+,\-.\/:;<=>?@\[\\\]^_`{|}~\xA1\u2010-\u2027\u2030-\u205E]/;
+
+const HighlightDelim = { resolve: "Highlight", mark: "HighlightMark" };
+
+export const highlight = {
+  defineNodes: ["Highlight", "HighlightMark"],
+  parseInline: [
+    {
+      name: "Highlight",
+      parse(cx, next, pos) {
+        // Exactly two "=" — a third means something else entirely (a setext
+        // rule, or the "==>" arrow glyph), so leave those alone.
+        if (next != 61 /* = */ || cx.char(pos + 1) != 61 || cx.char(pos + 2) == 61)
+          return -1;
+        const before = cx.slice(pos - 1, pos);
+        const after = cx.slice(pos + 2, pos + 3);
+        const spaceBefore = /\s|^$/.test(before);
+        const spaceAfter = /\s|^$/.test(after);
+        const punctBefore = PUNCTUATION.test(before);
+        const punctAfter = PUNCTUATION.test(after);
+        return cx.addDelimiter(
+          HighlightDelim,
+          pos,
+          pos + 2,
+          !spaceAfter && (!punctAfter || spaceBefore || punctBefore), // can open
+          !spaceBefore && (!punctBefore || spaceAfter || punctAfter), // can close
+        );
+      },
+      after: "Emphasis",
+    },
+  ],
+};
+
+// ── Footnotes: [^label] and [^label]: … ───────────────────────────────────
+// Only the REFERENCE is a grammar extension. It has to run before the built-in
+// link parser, which would otherwise swallow "[^1]" as a shortcut reference
+// link. A definition is just a line that begins with a reference followed by
+// ":", so it needs no block parser: scanner.js recognizes the line shape and
+// styles it in place, which is also what keeps definitions where the author
+// wrote them rather than relocating them to the bottom of the document.
+//
+// The label is taken literally (no nested brackets, no line breaks), matching
+// GFM. An empty "[^]" is not a footnote.
+export const footnotes = {
+  defineNodes: ["FootnoteRef", "FootnoteMark", "FootnoteLabel"],
+  parseInline: [
+    {
+      name: "FootnoteRef",
+      parse(cx, next, pos) {
+        if (next != 91 /* [ */ || cx.char(pos + 1) != 94 /* ^ */) return -1;
+        let i = pos + 2;
+        for (; i < cx.end; i++) {
+          const ch = cx.char(i);
+          if (ch == 93 /* ] */) break;
+          if (ch == 91 /* [ */ || ch == 10 /* \n */) return -1;
+        }
+        if (i >= cx.end || i == pos + 2) return -1; // unterminated or empty
+        return cx.addElement(
+          cx.elt("FootnoteRef", pos, i + 1, [
+            cx.elt("FootnoteMark", pos, pos + 2),
+            cx.elt("FootnoteLabel", pos + 2, i),
+            cx.elt("FootnoteMark", i, i + 1),
+          ]),
+        );
+      },
+      before: "Link",
+    },
+  ],
 };

@@ -88,18 +88,75 @@ const biSingle = (dash, n) =>
 const biLeft = (dash) => (dash ? "\u2190" : "\u21d0");
 const biRight = (dash) => (dash ? "\u2192" : "\u21d2");
 
+// ── Tags and color literals ───────────────────────────────────────────────
+
+// #tag. Deliberately the same rules as the Rust extractor and the live-buffer
+// one in tag-search.js: a tag starts with a letter or underscore and continues
+// with letters/digits/_/-//, up to 64 chars. \p{L} rather than \w so Korean
+// tags (#물리학) work. Requiring a letter first is also what keeps "#123456"
+// out — a HEX color can never be mistaken for a tag.
+//
+// The leading [^\w#/&] guard excludes a "#" that is part of something else: a
+// URL fragment (…/page#anchor), an HTML entity (&#123;), and "##" so an ATX
+// heading's second hash never opens a tag. Trailing "-" and "/" are trimmed
+// off the match, matching the extractor's own `.replace(/[-/]+$/, "")`.
+const TAG_RE = /(^|[^\w#/&])#([\p{L}_][\p{L}\p{N}_\-/]{0,63})/gu;
+
+// Color literals, chip-able. Ordered longest-first so "rgba" wins over "rgb".
+//
+//   #rgb #rgba #rrggbb #rrggbbaa
+//   rgb()/rgba()/hsl()/hsla()/hwb()/lab()/lch()/oklab()/oklch()/color()
+//
+// Named colors are deliberately NOT matched: "red", "tan", "gold" and friends
+// occur far too often as ordinary prose for a chip beside each one to be
+// anything but noise.
+//
+// The functional form is matched loosely (any run of non-paren chars) rather
+// than by validating components. The browser is the real parser here — the
+// value is handed to CSS and verified by round-tripping it through a style
+// declaration, so a malformed "rgb(nonsense)" simply produces no chip.
+// The HEX branch carries the same leading guard as TAG_RE for the same
+// reasons: "&#123;" is an HTML entity, not a color, and "…/page#fff" is a URL
+// fragment. The guard is a captured char (group 1), so the literal itself
+// starts at index + group1.length — see the offset maths in scanTagsAndColors.
+const COLOR_RE =
+  /(^|[^\w#/&])(#(?:[0-9a-fA-F]{4}|[0-9a-fA-F]{3}|[0-9a-fA-F]{8}|[0-9a-fA-F]{6})\b|\b(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color)\(\s*[^()]{1,96}\))/g;
+
+// Is `value` something CSS actually understands as a color? Assigning to a
+// detached declaration and reading it back is the only way to ask the browser
+// directly; an invalid value leaves the property empty. Cached because the
+// same literals recur constantly and a style write is not free.
+const colorCache = new Map();
+let probe = null;
+function normalizeColor(value) {
+  let hit = colorCache.get(value);
+  if (hit !== undefined) return hit;
+  // No DOM (the pure parts of this module are exercised under node): the
+  // regex already matched a well-formed literal, so accept it rather than
+  // dropping every chip.
+  if (typeof document === "undefined") return value;
+  if (!probe) probe = document.createElement("span").style;
+  probe.color = "";
+  probe.color = value;
+  hit = probe.color ? value : null;
+  colorCache.set(value, hit);
+  return hit;
+}
+
 // ── Line-shape regexes ────────────────────────────────────────────────────
 
 // Any "N. " / "N) " / "- " / "* " / "+ " marker at the start of a line.
 const LIST_LINE_RE = /^\s*(?:[-*+]|\d+[.)])\s/;
 const TASK_LINE_RE = /^\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]/;
 const ORDERED_MARK_RE = /^(\d+)([.)])$/;
+const FOOTNOTE_DEF_LINE_RE = /^\s*\[\^[^\]]+\]:/;
 
 // Nodes an inline mark can be wrapped by; used to resolve the OUTERMOST one.
 const WRAP = new Set([
   "Emphasis",
   "StrongEmphasis",
   "Strikethrough",
+  "Highlight",
   "InlineCode",
   "Link",
   "Image",
@@ -108,19 +165,25 @@ const WRAP = new Set([
 const INLINE_MARKS = new Set([
   "EmphasisMark",
   "StrikethroughMark",
+  "HighlightMark",
   "CodeMark",
   "LinkMark",
   "URL",
 ]);
 
-// ── Hierarchical ordered-list labels ──────────────────────────────────────
-// Pure (a Text + a SyntaxTree in, plain objects out), so the numbering rules
-// are unit-testable on their own.
+// ── Document pre-scan ─────────────────────────────────────────────────────
+// Two things have to be known before the main walk emits anything, and both
+// need the whole tree: ordered-list numbers (a marker's label depends on its
+// ancestors) and footnote numbers (a definition's number depends on a
+// reference that may appear later). They are gathered in ONE walk — the main
+// scan is already three passes over the document, and a fourth for every
+// keystroke is not worth the tidier separation.
 //
-// Walks the tree with a stack of list frames and returns one computed label per
-// ordered ListMark: top level -> "N." (or "N)"), ordered nested in ordered ->
-// dotted paths "N.M", "N.M.K".
+// Pure (a Text + a SyntaxTree in, plain data out), so the numbering rules stay
+// unit-testable without the view layer.
 //
+// Ordered-list labels: top level -> "N." (or "N)"), ordered nested in ordered
+// -> dotted paths "N.M", "N.M.K".
 //   - A BulletList BREAKS the dotted chain: an ordered list nested under a
 //     bullet list numbers independently from "1.", like CommonMark renderers,
 //     instead of inheriting the outer ordered ancestors' path.
@@ -128,13 +191,46 @@ const INLINE_MARKS = new Set([
 //     5., 6. (CommonMark honors the start number; later items are renumbered).
 //   - The lazy-continuation restart (a flush-left paragraph folded into the
 //     list) restarts from the marker's own literal rather than forcing 1.
-export function computeOrderedLabels(doc, tree) {
-  const out = [];
+//
+// Footnote numbers: labels are arbitrary text ("[^why]"), so the displayed
+// number comes from order of first REFERENCE, which is what a reader follows
+// down the page. A definition that is never referenced still gets a number,
+// appended after the referenced ones, so it never renders blank.
+
+// A FootnoteRef is a DEFINITION marker when it opens its line and is followed
+// by ":" — "[^note]: the text". Anywhere else it is a reference.
+const isFootnoteDef = (doc, node) => {
+  const line = doc.lineAt(node.from);
+  return (
+    doc.sliceString(node.to, node.to + 1) === ":" &&
+    !line.text.slice(0, node.from - line.from).trim()
+  );
+};
+
+const footnoteLabel = (doc, node) =>
+  doc.sliceString(node.from + 2, node.to - 1); // between "[^" and "]"
+
+export function prescan(doc, tree) {
+  const orderedLabels = [];
   const frames = []; // { ol: true, count: number|null } | { ol: false }
+  const footnoteNumbers = new Map();
+  const orphanDefs = [];
+  let nextFootnote = 1;
 
   tree.iterate({
     enter(node) {
       const name = node.name;
+
+      if (name === "FootnoteRef") {
+        const label = footnoteLabel(doc, node);
+        if (label) {
+          if (isFootnoteDef(doc, node)) orphanDefs.push(label);
+          else if (!footnoteNumbers.has(label))
+            footnoteNumbers.set(label, nextFootnote++);
+        }
+        return false;
+      }
+
       if (name === "OrderedList") {
         frames.push({ ol: true, count: null });
         return;
@@ -171,7 +267,7 @@ export function computeOrderedLabels(doc, tree) {
       let label = "";
       for (let j = i; j < frames.length; j++)
         label += (j > i ? "." : "") + frames[j].count;
-      out.push({ from: node.from, to: node.to, label: label + m[2] });
+      orderedLabels.push({ from: node.from, to: node.to, label: label + m[2] });
     },
     leave(node) {
       if (node.name === "OrderedList" || node.name === "BulletList")
@@ -179,8 +275,15 @@ export function computeOrderedLabels(doc, tree) {
     },
   });
 
-  return out;
+  for (const label of orphanDefs)
+    if (!footnoteNumbers.has(label)) footnoteNumbers.set(label, nextFootnote++);
+
+  return { orderedLabels, footnoteNumbers };
 }
+
+// Kept as its own entry point: the numbering rules above are the part with
+// real edge cases, and the tests drive them directly.
+export const computeOrderedLabels = (doc, tree) => prescan(doc, tree).orderedLabels;
 
 // ── Scanner ───────────────────────────────────────────────────────────────
 
@@ -191,10 +294,14 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
     notLinkDeco,
     markerDeco,
     glyphDeco,
+    tagDeco,
+    colorSwatchDeco,
     quoteLineDeco,
     hrLineDeco,
     listLineDeco,
     fenceLineDeco,
+    highlightDeco,
+    footnoteDefDeco,
     codeLineDeco,
     codeFirstDeco,
     codeLastDeco,
@@ -204,7 +311,8 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
     codeLastPadDeco,
     codeSoloPadDeco,
   } = deco;
-  const { LangLabelWidget, CheckboxWidget, ImageWidget } = widgets;
+  const { LangLabelWidget, CheckboxWidget, ImageWidget, FootnoteWidget } =
+    widgets;
 
   // First URL child of a Link/Image node, or "".
   const childUrl = (node, doc) => {
@@ -379,6 +487,56 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
     }
   }
 
+  // ── Tags and color literals on one line ────────────────────────────────
+  // Both are ALWAYS shown — neither hides anything, so there is nothing to
+  // reveal and no rangeItem to carry. The tag pill is a mark over text that
+  // stays fully visible, and the color chip is an extra widget beside the
+  // literal, so the source reads identically with the caret on the line or
+  // away from it. That also means zero per-selection work for either.
+  //
+  // Colors are scanned FIRST and their spans claimed, because "#facade" and
+  // "#deface" satisfy both patterns. Treating them as colors is the right call
+  // for the same reason the extractor refuses "#123456": a six-hex-digit run
+  // after a "#" is overwhelmingly a color, and the author who wants the tag
+  // can pick a name that isn't six hex digits.
+  function scanTagsAndColors(text, lineFrom, inInlineCode, always) {
+    let claimed = null;
+
+    COLOR_RE.lastIndex = 0;
+    let cm;
+    while ((cm = COLOR_RE.exec(text)) !== null) {
+      const from = lineFrom + cm.index + cm[1].length;
+      const to = from + cm[2].length;
+      const color = normalizeColor(cm[2]);
+      if (!color) continue; // not a color CSS accepts: leave it alone
+      (claimed || (claimed = [])).push(from, to);
+      if (inInlineCode(from)) continue;
+      always.push(colorSwatchDeco(color).range(from));
+    }
+
+    TAG_RE.lastIndex = 0;
+    let tm;
+    while ((tm = TAG_RE.exec(text)) !== null) {
+      // The leading guard is a captured character, not a lookbehind, so the
+      // "#" starts after it. Trailing "-" / "/" are not part of the tag.
+      const body = tm[2].replace(/[-/]+$/, "");
+      if (!body) continue;
+      const from = lineFrom + tm.index + tm[1].length;
+      const to = from + 1 + body.length; // "#" + name
+      if (claimed) {
+        let overlaps = false;
+        for (let i = 0; i < claimed.length; i += 2)
+          if (from < claimed[i + 1] && to > claimed[i]) {
+            overlaps = true;
+            break;
+          }
+        if (overlaps) continue;
+      }
+      if (inInlineCode(from)) continue;
+      always.push(tagDeco.range(from, to));
+    }
+  }
+
   // ── Document scan ──────────────────────────────────────────────────────
   function scanDoc(state, tree) {
     const doc = state.doc;
@@ -392,7 +550,8 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
     // literal content the user edits, so revealing the raw value ("6.") on the
     // active line would make the marker flip between "1.2.5" and "6." as the
     // caret moves.
-    for (const { from, to, label } of computeOrderedLabels(doc, tree))
+    const { orderedLabels, footnoteNumbers } = prescan(doc, tree);
+    for (const { from, to, label } of orderedLabels)
       always.push(markerDeco(label).range(from, to));
 
     tree.iterate({
@@ -539,6 +698,38 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
           return false;
         }
 
+        // ==marked text==: the marker itself is always painted; only its "=="
+        // delimiters hide and reveal, which the generic branch below handles
+        // via HighlightMark. Descend so nested emphasis still works.
+        if (name === "Highlight") {
+          always.push(highlightDeco.range(node.from, node.to));
+          return;
+        }
+
+        // Footnote reference "[^label]" or definition marker "[^label]:".
+        // Both collapse to a small widget and reveal their raw source when the
+        // selection touches them. The definition's reveal range includes the
+        // ":" because the widget replaces it too — otherwise a caret on the
+        // colon would leave half the marker rendered.
+        if (name === "FootnoteRef") {
+          const label = footnoteLabel(doc, node);
+          const num = footnoteNumbers.get(label);
+          if (!num) return false; // malformed: leave it as plain text
+          const isDef = isFootnoteDef(doc, node);
+          const to = isDef ? node.to + 1 : node.to;
+          rangeItems.push({
+            tFrom: node.from,
+            tTo: to,
+            on: EMPTY,
+            off: [
+              Decoration.replace({
+                widget: new FootnoteWidget(num, label, isDef),
+              }).range(node.from, to),
+            ],
+          });
+          return false;
+        }
+
         if (INLINE_MARKS.has(name))
           scanInlineMark(node, doc, always, lineItems, rangeItems);
       },
@@ -562,7 +753,23 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
     eachLine(doc, (text, from) => {
       if (codeLines.has(from)) return;
       if (LIST_LINE_RE.test(text)) always.push(listLineDeco.range(from));
+      else if (FOOTNOTE_DEF_LINE_RE.test(text))
+        always.push(footnoteDefDeco.range(from));
       scanGlyphs(text, from, inInlineCode, rangeItems);
+      // A heading's own "#…" run is syntax, not a tag: skip past it and scan
+      // only the title text. TAG_RE's [^\w#/&] guard already stops the second
+      // "#" of "##" from opening a tag, but the FIRST one of a lone "# " would
+      // otherwise match a title that begins with a letter ("# physics" -> the
+      // whole thing is a heading, not the tag #physics).
+      const h = /^#{1,6}\s/.exec(text);
+      if (h)
+        scanTagsAndColors(
+          text.slice(h[0].length),
+          from + h[0].length,
+          inInlineCode,
+          always,
+        );
+      else scanTagsAndColors(text, from, inInlineCode, always);
     });
 
     return { always, lineItems, rangeItems };

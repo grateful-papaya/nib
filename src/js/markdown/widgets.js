@@ -12,6 +12,7 @@
 // duplicate side effects.
 import { showToast } from "../utils.js";
 import { katexOptions } from "./katex-macros.js";
+import { eachLine } from "./scanner.js";
 
 // Canonical hues for the language label pill (see .cm-md-code-lang[data-lang]
 // in markdown-preview.css — the pill derives its text/background from
@@ -90,6 +91,21 @@ function langHue(lang) {
 // override exists) BEFORE the src, so layout reserves the final height
 // immediately. Only the very first sighting of an image can still pop once.
 const imageSizeCache = new Map();
+
+const FOOTNOTE_DEF_RE = /^\s*\[\^([^\]]+)\]:/;
+
+// Position just after the "[^label]:" of the definition for `label`, or null.
+// Scanned on demand (a click) rather than cached, so it can never go stale
+// against an edited document.
+function findFootnoteDef(doc, label) {
+  let found = null;
+  eachLine(doc, (text, from) => {
+    if (found !== null) return;
+    const m = FOOTNOTE_DEF_RE.exec(text);
+    if (m && m[1] === label) found = from + m[0].length;
+  });
+  return found;
+}
 
 // Measured pixel height of each rendered block equation, keyed by its LaTeX.
 // The raw source line reserves the same height while editing so tall equations
@@ -338,6 +354,90 @@ export function createWidgets({
     }
   }
 
+  // A footnote, in both of its guises: the superscript number that replaces an
+  // inline "[^label]" reference, and the "N." that replaces the "[^label]:" of
+  // a definition line. One class because the two are the same object seen from
+  // two positions, and eq() has to distinguish them anyway.
+  class FootnoteWidget extends WidgetType {
+    constructor(num, label, isDef) {
+      super();
+      this.num = num;
+      this.label = label;
+      this.isDef = isDef;
+    }
+    eq(other) {
+      return (
+        other.num === this.num &&
+        other.label === this.label &&
+        other.isDef === this.isDef
+      );
+    }
+    toDOM(view) {
+      if (this.isDef) {
+        const span = document.createElement("span");
+        span.className = "cm-md-footnote-def-mark";
+        span.textContent = this.num + ".";
+        return span;
+      }
+      const sup = document.createElement("sup");
+      sup.className = "cm-md-footnote-ref";
+      sup.textContent = String(this.num);
+      sup.title = this.label;
+      // Jump to the definition. mousedown rather than click so CodeMirror
+      // doesn't move the caret into the reference first — which would reveal
+      // the raw "[^label]" and destroy the widget mid-gesture.
+      sup.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        const pos = findFootnoteDef(view.state.doc, this.label);
+        if (pos == null) return; // no definition written yet: leave the caret
+        e.preventDefault();
+        e.stopPropagation();
+        view.dispatch({
+          selection: { anchor: pos },
+          scrollIntoView: true,
+          userEvent: "select.footnote",
+        });
+        view.focus();
+      });
+      return sup;
+    }
+    ignoreEvent(event) {
+      // The reference owns its mousedown (above); everything else, including
+      // every event on a definition marker, goes to CodeMirror so a click
+      // still places the caret and reveals the source.
+      return !!(!this.isDef && event && event.type === "mousedown");
+    }
+  }
+
+  // Small color chip placed just before a color literal (#rrggbb, rgb(…),
+  // oklch(…)). Purely presentational — it sits BESIDE the literal rather than
+  // replacing it, so the source text stays editable and selectable and no
+  // reveal-on-touch bookkeeping is needed.
+  //
+  // The color is applied via a custom property rather than background-color
+  // directly: the chip paints itself over a checkerboard so a translucent
+  // value (#00000080, rgba(…, .2)) reads as translucent instead of as a
+  // darker opaque swatch.
+  class ColorSwatchWidget extends WidgetType {
+    constructor(color) {
+      super();
+      this.color = color;
+    }
+    eq(other) {
+      return other.color === this.color;
+    }
+    toDOM() {
+      const chip = document.createElement("span");
+      chip.className = "cm-md-color-swatch";
+      chip.style.setProperty("--swatch", this.color);
+      chip.title = this.color;
+      return chip;
+    }
+    ignoreEvent() {
+      return false; // a click still places the caret in the literal
+    }
+  }
+
   // Renders a LaTeX string with KaTeX. `display` = block ($$…$$) vs inline.
   class MathWidget extends WidgetType {
     constructor(tex, display) {
@@ -416,6 +516,8 @@ export function createWidgets({
     CheckboxWidget,
     ImageWidget,
     GlyphWidget,
+    FootnoteWidget,
+    ColorSwatchWidget,
     MathWidget,
     mathHeightCache,
   };

@@ -166,6 +166,73 @@
     text-decoration: line-through;
 }
 
+/* ── Highlight (==marked text==) ──────────────────────────────────────────
+   Covers the whole Highlight node, "==" included, so the marker stays one
+   continuous band when the delimiters are revealed instead of splitting into
+   two stripes around a gap.
+
+   The color has no base.css token yet — it is the first content color that is
+   neither ink nor a warm neutral. The fallbacks below are what ships today;
+   point --st-md-highlight / --st-md-highlight-ink at base.css when the token
+   pair is added there and every declaration here starts obeying the theme. */
+.cm-md-highlight {
+    /* Semi-transparent on purpose: it composites over the blockquote fill and
+       the selection layer instead of punching a hole through them, and one
+       value works on both a light and a dark page. */
+    background-color: var(--st-md-highlight, rgba(255, 205, 45, 0.3));
+    color: var(--st-md-highlight-ink, inherit);
+    border-radius: var(--st-radius-4);
+    /* Horizontal only. Vertical padding on an inline span overflows the line
+       box and would overlap the line above (constraint 2), so the band is
+       given room by box-decoration-break instead of by growing. */
+    padding: 0 0.15em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
+/* ── Footnotes ────────────────────────────────────────────────────────────
+   Definitions stay where the author wrote them (see md-extensions.js) — this
+   is an editor, and silently relocating a line to the bottom of the document
+   would misreport where the text lives. */
+
+/* The superscript number replacing an inline "[^label]". No accent color —
+   it's a cross-reference, not a link, so it reads as body text with a hover
+   affordance rather than something competing for attention on every line
+   that cites a note. */
+.cm-md-footnote-ref {
+    /* vertical-align:super would stretch the line box and shift every line
+       below it as the widget appears; a relative offset on a 0.75em glyph
+       stays inside the existing box. */
+    position: relative;
+    top: -0.4em;
+    vertical-align: baseline;
+    padding: 0 0.15em;
+    font-size: 0.75em;
+    line-height: 0;
+    cursor: pointer;
+}
+
+.cm-md-footnote-ref:hover {
+    text-decoration: underline;
+}
+
+/* The "N." replacing the "[^label]:" of a definition. */
+.cm-md-footnote-def-mark {
+    display: inline-block;
+    margin-right: 0.1em;
+    color: var(--st-md-quote-ink);
+    font-weight: 700;
+}
+
+/* The definition LINE. margin-left, not padding-left: per-line padding-left
+   poisons the edge drawSelection samples (constraint 1). 6px is the base
+   .cm-line padding-left, so the visual indent is 1.5em, matching list lines. */
+.cm-line.cm-md-footnote-def {
+    margin-left: calc(1.5em - 6px);
+    font-size: 0.92em;
+    color: var(--st-md-quote-ink);
+}
+
 /* ── Inline code + code block text ────────────────────────────────────── */
 .cm-md-code {
     padding: 0.1em 0.3em;
@@ -447,6 +514,81 @@
     font-variant-ligatures: none;
 }
 
+/* ── #tags ────────────────────────────────────────────────────────────────
+   A mark, not a replacement: the "#" stays in the document and stays visible,
+   because it IS the tag's syntax. Hiding it would leave a pill whose text no
+   longer matches what `tag:` search matches, and would make the caret walk
+   through characters that aren't on screen.
+
+   The tint is derived from --st-accent-md rather than being its own token:
+   a tag is an accent-colored affordance, and one that drifted from the app's
+   accent as themes changed would look like a bug. color-mix keeps the fill at
+   ~10% so it sits under the ink instead of competing with it; the fallback is
+   what ships on engines without color-mix. */
+.cm-md-tag {
+    background-color: color-mix(
+        in srgb,
+        var(--st-accent-md) 10%,
+        transparent
+    );
+    color: var(--st-accent-md);
+    /* 999px rather than a --st-radius-* step: this is a pill, and the pill
+       shape has to survive whatever the radius scale is retuned to. */
+    border-radius: 999px;
+    /* Horizontal only — vertical padding on an inline span overflows the line
+       box and overlaps the line above (constraint 2 at the top of this file).
+       box-decoration-break keeps both ends round if a long tag ever wraps. */
+    padding: 0 0.4em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    /* Tags are navigation, not emphasis: slightly tighter than body text so a
+       line of them reads as metadata. */
+    font-size: 0.92em;
+    text-decoration: none !important;
+}
+
+/* ── Color literal swatch ─────────────────────────────────────────────────
+   A chip beside a #rrggbb / rgb(…) / oklch(…) literal, VS Code style. It is an
+   extra widget rather than a replacement, so the literal itself stays plain
+   text: fully selectable, fully editable, and identical whether the caret is
+   on the line or not (which is also why the scanner files it under `always`
+   and it costs nothing per selection change).
+
+   The chip paints the color over a checkerboard so a translucent value
+   (#00000080, rgba(…, .2)) reads as translucent rather than as a darker
+   opaque color. --swatch is set inline by the widget. */
+.cm-md-color-swatch {
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    /* Sits on the text baseline-ish rather than aligning its own box, so the
+       chip is centered against lowercase glyphs at any font size. */
+    vertical-align: -0.08em;
+    margin-right: 0.3em;
+    border-radius: var(--st-radius-4);
+    /* Border, not outline: an outline is drawn outside the box and would
+       overlap the neighbouring glyph at small sizes. The rule is what keeps a
+       white or near-transparent swatch visible on a light page. */
+    border: 1.5px solid var(--st-md-rule-a40);
+    box-sizing: border-box;
+    /* Layered: the color on top, an 8px checkerboard underneath. */
+    background-image:
+        linear-gradient(var(--swatch), var(--swatch)),
+        conic-gradient(
+            var(--st-md-rule-a35) 0deg 90deg,
+            transparent 90deg 180deg,
+            var(--st-md-rule-a35) 180deg 270deg,
+            transparent 270deg 360deg
+        );
+    background-size:
+        100% 100%,
+        8px 8px;
+    /* The literal is a widget's neighbour, not its content — a click on the
+       chip should still land the caret in the text, and the chip must never
+       eat a drag-selection crossing it. */
+    pointer-events: none;
+}
+
 .cm-content {
     font-variant-ligatures: none;
     font-feature-settings:
@@ -587,14 +729,15 @@
    scroll thumb (markdown-table.js measureBar places it at bottom + 23). Read
    downward, the stack below the table is:
        [ +row bar 13px | 4px gap | thumb 4px | 5px gap | next content ]
-   Top padding is the column gutter; the right padding is the add-column bar;
+   Top padding is the column gutter; the right padding is the add-column bar
+   (2px clearance + 13px bar, mirroring the add-row bar below the table);
    left is 0 so the table is not indented relative to body text. */
 .cm-md-table-wrap {
     position: relative;
     width: fit-content;
     max-width: 100%;
     margin: 2px 0;
-    padding: 16px 14px 28px 0;
+    padding: 16px 15px 28px 0;
 }
 
 /* A table wider than the editor pans inside this wrapper only. Native
@@ -725,7 +868,7 @@
 .cm-md-table-gutter-top {
     top: 0;
     left: 0;
-    right: 14px;
+    right: 15px; /* = wrap right padding: stop at the table's right border */
     height: 16px;
 }
 
@@ -815,16 +958,23 @@
     opacity: 1;
 }
 
+/* The two bars are deliberately the same shape: 13px thick, sitting 2px clear
+   of the table border. The column bar used to be `right: 2px`, which put its
+   inner edge at right:15px against a table edge at right:14px — a 1px OVERLAP
+   where the row bar had a 2px gap, so the two read as different components.
+   Both are now expressed the same way: flush to the wrap edge, with the
+   clearance coming from the wrap padding (15px = 13 + 2, 28px = 13 + 2 + the
+   scrollbar thumb's own 13px layer). */
 .cm-md-table-addcol {
     top: 16px;
     bottom: 28px; /* = wrap bottom padding: stop at the table's bottom border */
-    right: 2px;
+    right: 0;
     width: 13px;
 }
 
 .cm-md-table-addrow {
     left: 0;
-    right: 14px;
+    right: 15px;
     /* table_bottom + 2 — the extra wrap padding below this belongs to the
        scrollbar thumb's layer. */
     bottom: 13px;

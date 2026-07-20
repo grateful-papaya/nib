@@ -17,7 +17,8 @@
 //   code-hscroll.js  per-block horizontal scrolling for fenced code
 //   hscrollbar.js    the floating scrollbar thumb both scrollers share
 //   keymaps.js       Tab/Enter/auto-pair/link-click/search bindings
-//   smart-table.js   block-parser extensions (pure)
+//   md-extensions.js  the grammar extensions: fences, tables, ==highlight==,
+//                    [^footnotes] (pure)
 //   table-*.js       the GFM table extension, entered via markdown-table.js
 //
 // The factories exist because their contents close over symbols from the
@@ -31,7 +32,12 @@ import { createScanner, computeOrderedLabels } from "./markdown/scanner.js";
 import { createLivePreviewPlugin } from "./markdown/live-preview.js";
 import { createMathExtensions } from "./markdown/math-field.js";
 import { createCodeBlockHScroll } from "./markdown/code-hscroll.js";
-import { backtickOnlyFence, smartTable } from "./markdown/smart-table.js";
+import {
+  backtickOnlyFence,
+  smartTable,
+  highlight,
+  footnotes,
+} from "./markdown/md-extensions.js";
 
 // Re-exported for tests, which exercise the numbering rules directly.
 export { computeOrderedLabels };
@@ -127,6 +133,7 @@ export async function getMarkdownExtensions() {
     t,
     MarkerWidget: widgets.MarkerWidget,
     GlyphWidget: widgets.GlyphWidget,
+    ColorSwatchWidget: widgets.ColorSwatchWidget,
   });
 
   const { scanDoc, assemble } = createScanner({
@@ -375,7 +382,15 @@ export async function getMarkdownExtensions() {
       // the real language grammar so the code-token rules in decorations.js
       // light up. No-op when the bundle doesn't ship language-data.
       ...(languages ? { codeLanguages: languages } : {}),
-      extensions: [{ remove: ["SetextHeading"] }, backtickOnlyFence, smartTable],
+      extensions: [
+        // SetextHeading is removed because "===" underlining collides with the
+        // ==highlight== delimiter, and Nib's headings are ATX-only anyway.
+        { remove: ["SetextHeading"] },
+        backtickOnlyFence,
+        smartTable,
+        highlight,
+        footnotes,
+      ],
     }),
     syntaxHighlighting(deco.mdHighlight),
 
