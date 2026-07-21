@@ -44,7 +44,7 @@
     "linux": {
       "target": ["deb", "AppImage"],
       "category": "Office",
-      "maintainer": "grateful-papaya <you@example.com>",
+      "maintainer": "grateful-papaya <alsb394hdp@gmail.com>",
       "synopsis": "Markdown editor",
       "desktop": {
         "entry": {
