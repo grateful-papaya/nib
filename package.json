@@ -1,7 +1,7 @@
 {
-  "name": "elec",
+  "name": "someapp",
   "version": "1.0.0",
-  "description": "",
+  "description": "A local-first markdown editor",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -9,7 +9,7 @@
     "dist:linux": "electron-builder --linux",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "grateful-papaya <you@example.com>",
   "license": "ISC",
   "devEngines": {
     "packageManager": {
@@ -21,7 +21,11 @@
   "build": {
     "appId": "com.yourname.SomeApp",
     "productName": "SomeApp",
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "rust-backend/*.node",
+      "bin/**/*"
+    ],
     "directories": {
       "output": "dist"
     },
@@ -38,8 +42,21 @@
       "!**/*.map"
     ],
     "linux": {
-      "target": ["AppImage"],
-      "category": "Office"
+      "target": ["deb", "AppImage"],
+      "category": "Office",
+      "maintainer": "grateful-papaya <you@example.com>",
+      "synopsis": "Markdown editor",
+      "desktop": {
+        "entry": {
+          "MimeType": "text/markdown;text/x-markdown"
+        }
+      }
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0", "libnotify4", "libnss3", "libxss1",
+        "libxtst6", "xdg-utils", "libatspi2.0-0", "libsecret-1-0"
+      ]
     }
   },
   "devDependencies": {
@@ -50,12 +67,11 @@
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
     "@lezer/highlight": "^1.2.3",
+    "@napi-rs/cli": "^3.7.2",
     "codemirror": "^6.0.2",
     "electron": "^42.5.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1"
   },
-  "dependencies": {
-    "@napi-rs/cli": "^3.7.2"
-  }
+  "dependencies": {}
 }
