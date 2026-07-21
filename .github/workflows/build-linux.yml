@@ -2,35 +2,53 @@ name: Build Linux
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22.13.0'
 
-      - uses: pnpm/action-setup@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
         with:
-          version: 11
+          version: 11.14.0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
 
       - name: Install deb tooling
-        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg libsecret-1-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg libsecret-1-dev
 
-      - run: pnpm install --no-frozen-lockfile
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Build native module
-        run: pnpm --filter . run build:rust   # 실제 스크립트명으로 교체
+      - name: Allow required native build scripts
+        run: pnpm approve-builds esbuild
+        continue-on-error: true
 
-      - name: Build deb
-        run: pnpm electron-builder --linux deb --publish never
+      - name: Build Rust native module (napi)
+        working-directory: rust-backend
+        run: pnpm exec napi build --platform --release
+
+      - name: Build Linux app
+        run: pnpm exec electron-builder --linux deb --x64 --publish never
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nib-deb
+          name: SomeApp-linux
           path: dist/*.deb
+          if-no-files-found: error
