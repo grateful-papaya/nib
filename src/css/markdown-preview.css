@@ -545,6 +545,20 @@
        line of them reads as metadata. */
     font-size: 0.92em;
     text-decoration: none !important;
+    /* Clicking the pill searches the vault for that tag (markdown-preview.js).
+       The cursor is the only affordance — an underline or a border would fight
+       the pill shape, and a colour shift on hover is enough to confirm it's
+       live without making a paragraph full of tags twitch as the mouse
+       crosses it. */
+    cursor: pointer;
+}
+
+.cm-md-tag:hover {
+    background-color: color-mix(
+        in srgb,
+        var(--st-accent-md) 18%,
+        transparent
+    );
 }
 
 /* ── Color literal swatch ─────────────────────────────────────────────────
@@ -569,7 +583,7 @@
     /* Border, not outline: an outline is drawn outside the box and would
        overlap the neighbouring glyph at small sizes. The rule is what keeps a
        white or near-transparent swatch visible on a light page. */
-    border: 1.5px solid var(--st-md-rule-a40);
+    border: 1px solid var(--st-md-rule-a40);
     box-sizing: border-box;
     /* Layered: the color on top, an 8px checkerboard underneath. */
     background-image:

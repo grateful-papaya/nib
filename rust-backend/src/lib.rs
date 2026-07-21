@@ -1419,7 +1419,13 @@ pub fn start_vault_watcher(vault_path: String, callback: ThreadsafeFunction<(), 
 // simple enough to scan by hand, and hand-scanning is what makes it possible
 // to skip fenced code blocks correctly (a regex can't track that state).
 
-const TAG_CACHE_VERSION: u32 = 1;
+/// Bumped whenever `extract_tags` changes what it returns for unchanged input.
+/// The incremental refresh below skips any file whose mtime hasn't moved, so
+/// without a bump an existing vault would keep serving tags extracted under
+/// the OLD rules indefinitely — nothing about a rule change touches mtimes.
+///
+/// 2: hex colours (`#fff`, `#facade`) are no longer tags.
+const TAG_CACHE_VERSION: u32 = 2;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 struct TagFileEntry {
@@ -1464,11 +1470,28 @@ fn is_tag_char(c: char) -> bool {
 
 /// A tag must START with a letter or underscore. That one rule removes the
 /// biggest source of false positives — `#1`, `#42`, `#123456` (issue refs,
-/// numbered anything, six-digit hex colours). Letter-led hex like `#fff` still
-/// slips through the rule itself, but inline code and fenced blocks are
-/// stripped before the scan runs, which is where CSS actually lives.
+/// numbered anything, six-digit hex colours).
 fn is_tag_start(c: char) -> bool {
   c.is_alphabetic() || c == '_'
+}
+
+/// Letter-led hex colours (`#fff`, `#abc`, `#facade`, `#deface`, `#beefed`)
+/// satisfy `is_tag_start`, so they need excluding separately. Stripping code
+/// spans and fenced blocks before the scan is not enough on its own: a colour
+/// written in prose ("배경은 #facade로") is not in code, and a `tags: [fff]`
+/// line in frontmatter never went through the inline scan at all.
+///
+/// This must stay in step with `isTagName` in js/markdown/scanner.js, which
+/// the editor's tag pill, its colour swatch, `tag:` search and the
+/// autocomplete list all share. When they disagree the symptom is visible:
+/// a literal shows a colour chip in the editor while also appearing in tag
+/// autocomplete.
+///
+/// Only the four lengths CSS actually accepts count, so `#abcde` and
+/// `#abcdefg` remain ordinary tags. The cost is that a literal `#fff` tag
+/// can't be written — much cheaper than the two sides drifting apart.
+fn is_hex_colour(s: &str) -> bool {
+  matches!(s.len(), 3 | 4 | 6 | 8) && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 fn push_tag(out: &mut Vec<String>, disp: &mut Vec<String>, raw: &str) {
@@ -1481,6 +1504,9 @@ fn push_tag(out: &mut Vec<String>, disp: &mut Vec<String>, raw: &str) {
     return;
   }
   if !cleaned.chars().all(is_tag_char) {
+    return;
+  }
+  if is_hex_colour(cleaned) {
     return;
   }
   let lower = cleaned.to_lowercase();
@@ -1740,11 +1766,20 @@ fn refresh_tag_cache(vault_path: &str) -> std::result::Result<Vec<(String, Strin
 
 /// Hierarchical match: querying `project` also matches `project/nib`, but not
 /// `projection`. Exact match always wins first for the common case.
+/// Prefix match, case already folded by every caller. `tag:태` matches `태그`,
+/// `tag:phys` matches `physics`, and `tag:project` still matches
+/// `project/nib` — the old exact-or-`/`-boundary rule is a strict subset of
+/// this, so nothing that matched before stops matching.
+///
+/// Prefix rather than exact is what replaces the removed autocomplete
+/// dropdown: the old pipeline was "type part of a tag, pick the completion,
+/// exact search runs", and with the picker gone a half-typed `#태` returning
+/// nothing — while every text query substring-matches — made tag search feel
+/// broken. (Byte-wise starts_with is char-safe here: both strings are valid
+/// UTF-8, and a valid sequence ending at the prefix boundary means the next
+/// byte starts a new char.)
 fn tag_matches(candidate: &str, query: &str) -> bool {
-  candidate == query
-    || (candidate.len() > query.len()
-      && candidate.starts_with(query)
-      && candidate.as_bytes()[query.len()] == b'/')
+  candidate.starts_with(query)
 }
 
 #[napi(object)]
@@ -1787,15 +1822,201 @@ pub fn list_vault_tags(vault_path: String) -> Result<Vec<TagCount>> {
   Ok(out)
 }
 
+/// Case-insensitive (ASCII-folded) search for `q` at a tag-word START in
+/// `line`, mirroring tag_matches' prefix semantics: the char before the match
+/// must not be a tag char (so `태` can't hit the middle of `상태`), but the
+/// match may continue — `태` DOES hit the front of `태그`. The returned span
+/// is extended to the end of the tag word, so the highlight covers the whole
+/// tag the filter matched rather than just the typed prefix.
+/// Returns (start, len) as UTF-16 code-unit offsets, which is what the JS side
+/// slices lineText with. Char-wise with ASCII folding rather than
+/// to_lowercase()+find: full Unicode lowercasing can change byte lengths, and
+/// a byte offset found in the folded string then indexes the ORIGINAL line —
+/// an out-of-bounds / mid-char panic waiting for the right input. Korean has
+/// no case, so ASCII folding loses nothing this app's tags can contain.
+fn find_tag_word(line: &str, q: &str) -> Option<(i32, i32)> {
+  let chars: Vec<char> = line.chars().collect();
+  let qc: Vec<char> = q.chars().collect();
+  if qc.is_empty() || qc.len() > chars.len() {
+    return None;
+  }
+  let mut u16 = Vec::with_capacity(chars.len() + 1);
+  let mut acc = 0i32;
+  for c in &chars {
+    u16.push(acc);
+    acc += c.len_utf16() as i32;
+  }
+  u16.push(acc);
+
+  for start in 0..=chars.len() - qc.len() {
+    if !(0..qc.len()).all(|k| chars[start + k].to_ascii_lowercase() == qc[k]) {
+      continue;
+    }
+    if start > 0 && is_tag_char(chars[start - 1]) {
+      continue; // mid-word: `태` must not match inside `상태`
+    }
+    let mut end = start + qc.len();
+    while end < chars.len() && is_tag_char(chars[end]) {
+      end += 1;
+    }
+    return Some((u16[start], u16[end] - u16[start]));
+  }
+  None
+}
+
+/// First inline `#tag` on `line` whose tag matches any of `include`.
+/// A faithful mirror of parse_inline_tags' per-line rules — code spans, the
+/// preceding-char guard, is_tag_start, trailing `-`/`/` trim, hex-colour
+/// exclusion — because a locator that "finds" a tag the extractor never
+/// indexed (or misses one it did) points search results at the wrong text.
+/// Returns (start, len) UTF-16 offsets covering `#` plus the tag.
+fn locate_inline_tag(line: &str, include: &[String]) -> Option<(i32, i32)> {
+  let chars: Vec<char> = line.chars().collect();
+  let mut u16 = Vec::with_capacity(chars.len() + 1);
+  let mut acc = 0i32;
+  for c in &chars {
+    u16.push(acc);
+    acc += c.len_utf16() as i32;
+  }
+  u16.push(acc);
+
+  let mut i = 0;
+  let mut in_code_span = false;
+  while i < chars.len() {
+    let c = chars[i];
+    if c == '`' {
+      in_code_span = !in_code_span;
+      i += 1;
+      continue;
+    }
+    if in_code_span || c != '#' {
+      i += 1;
+      continue;
+    }
+    let prev_ok = if i == 0 {
+      true
+    } else {
+      let p = chars[i - 1];
+      !(p.is_alphanumeric() || p == '_' || p == '#' || p == '/' || p == '&')
+    };
+    if !prev_ok {
+      i += 1;
+      continue;
+    }
+    let mut j = i + 1;
+    while j < chars.len() && is_tag_char(chars[j]) {
+      j += 1;
+    }
+    if j > i + 1 {
+      let raw: String = chars[i + 1..j].iter().collect();
+      let cleaned = raw.trim_end_matches(|c| c == '/' || c == '-');
+      if !cleaned.is_empty()
+        && cleaned.chars().next().map(is_tag_start).unwrap_or(false)
+        && cleaned.chars().all(is_tag_char)
+        && !is_hex_colour(cleaned)
+      {
+        let cand = cleaned.to_lowercase();
+        if include.iter().any(|q| tag_matches(&cand, q)) {
+          let end = i + 1 + cleaned.chars().count();
+          return Some((u16[i], u16[end] - u16[i]));
+        }
+      }
+    }
+    i = j.max(i + 1);
+  }
+  None
+}
+
+/// Where an included tag actually occurs in `content`:
+/// (line_number 1-based, line_text, match_start, match_len) with UTF-16
+/// offsets. Inline body occurrences win over frontmatter ones — the body is
+/// where the author wrote the tag in context, which is what a search result
+/// should land on; the frontmatter hit is kept as a fallback for files whose
+/// tags live only in `tags:`. Fenced blocks are skipped in the body walk with
+/// the same open/close-marker tracking as parse_inline_tags, and the
+/// frontmatter scan only looks at tags-context lines (the key line itself or
+/// a `- item` continuation of a block list) so a tag name appearing in, say,
+/// `title:` can't hijack the result.
+fn locate_tag_occurrence(content: &str, include: &[String]) -> Option<(i32, String, i32, i32)> {
+  let mut fm_hit: Option<(i32, String, i32, i32)> = None;
+  let mut in_fm = false;
+  let mut in_tags_block = false;
+  let mut in_fence = false;
+  let mut fence_marker = '`';
+
+  for (idx, line) in content.lines().enumerate() {
+    let trimmed = line.trim();
+    if idx == 0 && trimmed == "---" {
+      in_fm = true;
+      continue;
+    }
+    if in_fm {
+      if trimmed == "---" || trimmed == "..." {
+        in_fm = false;
+        continue;
+      }
+      if fm_hit.is_some() {
+        continue;
+      }
+      let t = line.trim_start();
+      let mut searchable = false;
+      if let Some((key, value)) = t.split_once(':') {
+        let kl = key.trim().to_lowercase();
+        if kl == "tags" || kl == "tag" || kl == "keywords" {
+          searchable = true;
+          in_tags_block = value.trim().is_empty();
+        } else {
+          in_tags_block = false;
+        }
+      } else if in_tags_block && t.starts_with('-') {
+        searchable = true;
+      } else {
+        in_tags_block = false;
+      }
+      if searchable {
+        for q in include {
+          if let Some((start, len)) = find_tag_word(line, q) {
+            fm_hit = Some(((idx + 1) as i32, line.to_string(), start, len));
+            break;
+          }
+        }
+      }
+      continue;
+    }
+
+    let ts = line.trim_start();
+    if ts.starts_with("```") || ts.starts_with("~~~") {
+      let marker = ts.chars().next().unwrap();
+      if !in_fence {
+        in_fence = true;
+        fence_marker = marker;
+      } else if marker == fence_marker {
+        in_fence = false;
+      }
+      continue;
+    }
+    if in_fence {
+      continue;
+    }
+    if let Some((start, len)) = locate_inline_tag(line, include) {
+      return Some(((idx + 1) as i32, line.to_string(), start, len));
+    }
+  }
+  fm_hit
+}
+
 /// Tag-filtered search. `include` tags are ANDed, `exclude` tags are removed,
 /// and `text` (optional) is then full-text searched WITHIN the surviving
 /// files only. Order matters: the tag filter is a set operation over data
 /// already in memory, while the text pass is file I/O — narrowing first is
 /// what makes `tag:physics 라그랑지안` fast on a large vault.
 ///
-/// With no `text`, each surviving file yields one row whose `lineText` is a
-/// preview (its first heading, or first body line), so the existing results
-/// dropdown renders tag hits without any special-casing.
+/// With no `text`, each surviving file yields one row pointing at the first
+/// occurrence of an included tag (inline `#tag` preferred, frontmatter
+/// fallback) with a real match span — so clicking a tag result navigates to
+/// the tag exactly like a text result navigates to its match. A preview row
+/// is only emitted when no occurrence can be located (e.g. an exclude-only
+/// query, where there is nothing specific to point at).
 #[napi]
 pub fn search_by_tags(
   vault_path: String,
@@ -1842,6 +2063,27 @@ pub fn search_by_tags(
   for (path, name) in candidates {
     if query.is_empty() {
       let content = read_text_file(&path).unwrap_or_default();
+      // Point the result at the tag itself. This is what makes clicking a
+      // tag result behave exactly like clicking a text result: the JS side
+      // computes the jump target as line.from + matchStart and selects
+      // matchLen code units, so a row carrying the tag's own line and span
+      // navigates and highlights with zero special-casing over there.
+      if let Some((line_number, line_text, match_start, match_len)) =
+        locate_tag_occurrence(&content, &include)
+      {
+        results.push(ContentSearchMatch {
+          path,
+          name,
+          line_number,
+          line_text,
+          match_start,
+          match_len,
+        });
+        continue;
+      }
+      // No locatable occurrence — an exclude-only query (nothing to point
+      // at), or extractor/locator drift on an edge case. Fall back to the
+      // old preview row: first heading or first body line, zero-length span.
       let mut preview = String::new();
       let mut line_number = 1i32;
       let mut in_fm = false;

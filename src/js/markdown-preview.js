@@ -28,7 +28,7 @@ import { createImageResolver } from "./markdown/image-resolver.js";
 import { createWidgets } from "./markdown/widgets.js";
 import { createDecorations } from "./markdown/decorations.js";
 import { createKeymaps } from "./markdown/keymaps.js";
-import { createScanner, computeOrderedLabels } from "./markdown/scanner.js";
+import { createScanner, computeOrderedLabels, isTagName } from "./markdown/scanner.js";
 import { createLivePreviewPlugin } from "./markdown/live-preview.js";
 import { createMathExtensions } from "./markdown/math-field.js";
 import { createCodeBlockHScroll } from "./markdown/code-hscroll.js";
@@ -366,6 +366,47 @@ export async function getMarkdownExtensions() {
     },
   });
 
+  // ── Tag click ──────────────────────────────────────────────────────────
+  //
+  // Clicking a #tag pill searches the vault for it. mousedown rather than
+  // click, matching the footnote reference: by the time a click fires,
+  // CodeMirror has already moved the caret into the tag, and a caret inside
+  // the pill is both a visible flicker and the thing that would have to be
+  // undone afterwards.
+  //
+  // Ctrl/Cmd-click and middle-click are left alone so the usual "put the
+  // cursor here" gestures still reach the document — the pill is a
+  // convenience, not a hijack of the text underneath it.
+  const tagClick = EditorView.domEventHandlers({
+    mousedown(event, view) {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey)
+        return false;
+      const el = event.target?.closest?.(".cm-md-tag");
+      if (!el || !view.dom.contains(el)) return false;
+
+      // Read the tag out of the DOCUMENT, not the element's text: a pill split
+      // across a line wrap renders as two elements, and textContent of one of
+      // them is half a tag.
+      const pos = view.posAtDOM(el);
+      const line = view.state.doc.lineAt(pos);
+      const rel = pos - line.from;
+      const m = /^#([\p{L}_][\p{L}\p{N}_\-/]{0,63})/u.exec(line.text.slice(rel));
+      const name = m && m[1].replace(/[-/]+$/, "");
+      if (!name || !isTagName(name)) return false;
+
+      event.preventDefault();
+      event.stopPropagation();
+      // A CustomEvent rather than a callback threaded through
+      // getMarkdownExtensions(): this module is built once with no arguments,
+      // and the search bar that handles this lives several layers away.
+      // Bubbles so a single listener on document catches every editor.
+      view.dom.dispatchEvent(
+        new CustomEvent("nib-tag-click", { detail: { tag: name }, bubbles: true }),
+      );
+      return true;
+    },
+  });
+
   return [
     // Editor-wide soft wrap. Without it, .cm-content grows to the widest line
     // in the document, so a code line's own width always fits and its
@@ -402,6 +443,7 @@ export async function getMarkdownExtensions() {
     mathMouseDown,
     dragScroll,
     composeEndNudge,
+    tagClick,
     codeBlockHScroll,
 
     linkClick,

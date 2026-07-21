@@ -91,16 +91,29 @@ const biRight = (dash) => (dash ? "\u2192" : "\u21d2");
 // ── Tags and color literals ───────────────────────────────────────────────
 
 // #tag. Deliberately the same rules as the Rust extractor and the live-buffer
-// one in tag-search.js: a tag starts with a letter or underscore and continues
-// with letters/digits/_/-//, up to 64 chars. \p{L} rather than \w so Korean
-// tags (#물리학) work. Requiring a letter first is also what keeps "#123456"
-// out — a HEX color can never be mistaken for a tag.
+// one in tag-search.js — which imports isTagName from here rather than
+// reimplementing it, because the editor showing a tag pill on something
+// `tag:` search won't find (or a colour swatch on something it will) is
+// exactly the disagreement this pair has to avoid. The rule lives on THIS
+// side of the import because this module deliberately has no dependencies,
+// while tag-search.js pulls in app state.
 //
 // The leading [^\w#/&] guard excludes a "#" that is part of something else: a
 // URL fragment (…/page#anchor), an HTML entity (&#123;), and "##" so an ATX
 // heading's second hash never opens a tag. Trailing "-" and "/" are trimmed
 // off the match, matching the extractor's own `.replace(/[-/]+$/, "")`.
 const TAG_RE = /(^|[^\w#/&])#([\p{L}_][\p{L}\p{N}_\-/]{0,63})/gu;
+
+// The letter-first rule in TAG_RE stops most colour codes, but not the ones
+// made entirely of a-f: "#fff", "#abc", "#facade", "#deface", "#beefed" all
+// satisfy it. Those are colours, not tags — otherwise every colour in a
+// stylesheet note lands in tag autocomplete and in the Rust index.
+//
+// Only the four lengths CSS actually accepts count (3/4/6/8), so "#abcde" and
+// "#abcdefg" stay ordinary tags. The cost is that a literal "#fff" tag can't
+// be written; that is much cheaper than the two systems disagreeing.
+const HEX_COLOR_RE = /^(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+export const isTagName = (name) => !HEX_COLOR_RE.test(name);
 
 // Color literals, chip-able. Ordered longest-first so "rgba" wins over "rgb".
 //
@@ -494,22 +507,19 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
   // literal, so the source reads identically with the caret on the line or
   // away from it. That also means zero per-selection work for either.
   //
-  // Colors are scanned FIRST and their spans claimed, because "#facade" and
-  // "#deface" satisfy both patterns. Treating them as colors is the right call
-  // for the same reason the extractor refuses "#123456": a six-hex-digit run
-  // after a "#" is overwhelmingly a color, and the author who wants the tag
-  // can pick a name that isn't six hex digits.
+  // The two passes are independent: isTagName makes "#fff"/"#facade" a colour
+  // and never a tag, so no span can satisfy both and neither pass has to know
+  // what the other matched. An earlier revision resolved the overlap at scan
+  // time instead, which made the EDITOR consistent while leaving `tag:` search
+  // and the Rust index still treating those as tags — the rule has to live in
+  // the shared predicate, not in this function.
   function scanTagsAndColors(text, lineFrom, inInlineCode, always) {
-    let claimed = null;
-
     COLOR_RE.lastIndex = 0;
     let cm;
     while ((cm = COLOR_RE.exec(text)) !== null) {
       const from = lineFrom + cm.index + cm[1].length;
-      const to = from + cm[2].length;
       const color = normalizeColor(cm[2]);
       if (!color) continue; // not a color CSS accepts: leave it alone
-      (claimed || (claimed = [])).push(from, to);
       if (inInlineCode(from)) continue;
       always.push(colorSwatchDeco(color).range(from));
     }
@@ -520,20 +530,10 @@ export function createScanner({ Decoration, deco, widgets, isReadMode }) {
       // The leading guard is a captured character, not a lookbehind, so the
       // "#" starts after it. Trailing "-" / "/" are not part of the tag.
       const body = tm[2].replace(/[-/]+$/, "");
-      if (!body) continue;
+      if (!body || !isTagName(body)) continue;
       const from = lineFrom + tm.index + tm[1].length;
-      const to = from + 1 + body.length; // "#" + name
-      if (claimed) {
-        let overlaps = false;
-        for (let i = 0; i < claimed.length; i += 2)
-          if (from < claimed[i + 1] && to > claimed[i]) {
-            overlaps = true;
-            break;
-          }
-        if (overlaps) continue;
-      }
       if (inInlineCode(from)) continue;
-      always.push(tagDeco.range(from, to));
+      always.push(tagDeco.range(from, from + 1 + body.length)); // "#" + name
     }
   }
 

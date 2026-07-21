@@ -4,13 +4,9 @@ import { getEditorView, getCurrentOpenFile } from "./state/editorState.js";
 import { revealInSidebar } from "./file-tree.js";
 import { showToast } from "./utils.js";
 import { attachScrollbar } from "./scrollbar.js";
-import {
-  parseTagQuery,
-  initTagAutocomplete,
-  tagAutocompleteKeydown,
-  closeTagAutocomplete,
-} from "./tag-search.js";
+import { parseTagQuery } from "./tag-search.js";
 import { closePathInfo } from "./path-info.js";
+import { openFileNode } from "./editor/open-file.js";
 
 // ─── Titlebar Search Manager ───────────────────────────────────────────────
 //
@@ -325,6 +321,24 @@ const TitlebarSearchManager = (() => {
       nameSpan.textContent = m.name;
       fileRow.appendChild(nameSpan);
 
+      // Type badge on tag-query rows: says "this row is a tag hit, not a
+      // text hit" and nothing more. The label is "tag:" — the query prefix
+      // itself — rather than "#tag", because "tag" is a perfectly legal tag
+      // NAME and a "#tag" badge would be indistinguishable from a row that
+      // literally matched #tag; a colon can never appear in a tag name, so
+      // "tag:" is unambiguous. Which tag matched is shown by the snippet's
+      // highlight, and what was typed is in the search box.
+      //
+      // Appended BEFORE the line number: that span carries margin-left:auto
+      // to pin itself to the right edge, so anything added after it would be
+      // pushed out past it instead of sitting next to the filename.
+      if (m.isTag) {
+        const chip = document.createElement("span");
+        chip.className = "titlebar-result-tag-chip";
+        chip.textContent = "tag:";
+        fileRow.appendChild(chip);
+      }
+
       const lineSpan = document.createElement("span");
       lineSpan.className = "titlebar-result-line-number";
       lineSpan.textContent = `Ln ${m.lineNumber}`;
@@ -384,40 +398,48 @@ const TitlebarSearchManager = (() => {
     }
   };
 
-  const openResultInEditor = (match, { focusEditor = false } = {}) => {
+  const openResultInEditor = async (match, { focusEditor = false } = {}) => {
     // Instant, not smooth — an animated sidebar scroll here reads as the
     // whole app jarringly shifting right as a search result is clicked.
     revealInSidebar(match.path, "instant");
-    const row = document.querySelector(
-      `.tree-item.file[data-path="${CSS.escape(match.path)}"]:not([data-pinned-copy])`,
-    );
-    row?.querySelector(".item-label")?.click();
 
-    // Jump to the matched line once the file is open. A short delay lets
-    // the normal file-open pipeline (async read + CodeMirror doc swap)
-    // finish before we touch the view.
-    setTimeout(() => {
-      const view = getEditorView();
-      if (!view) return;
-      try {
-        const line = view.state.doc.line(
-          Math.min(match.lineNumber, view.state.doc.lines),
-        );
-        const pos = Math.min(line.from + match.matchStart, line.to);
-        view.dispatch({
-          selection: { anchor: pos, head: pos + (match.matchLen || 0) },
-        });
-        scrollMatchIntoView(view, pos);
-        // Only hand focus to the editor when the user explicitly clicked a
-        // result row. During Enter/arrow cycling this used to steal focus
-        // from the search input mid-navigation, so the NEXT Enter (or worse,
-        // the next typed character) landed inside the document instead of
-        // the search bar.
-        if (focusEditor) view.focus({ preventScroll: true });
-      } catch (err) {
-        console.error("Failed to jump to search match:", err);
-      }
-    }, 120);
+    // openFileNode directly, awaited — not a simulated .click() on the tree
+    // row plus a fixed setTimeout. The timer version had no way to know when
+    // the async open (file read + CodeMirror doc swap) actually finished: too
+    // short and it dispatched into the PREVIOUS document, guarded and it
+    // silently did nothing for any file that took longer than the delay.
+    // Awaiting the open removes the race outright; when this resumes, the
+    // document is in the view (or the open failed, which the path check
+    // below catches). Both tag-search and text-search results normalize to
+    // the same {path, name, lineNumber, matchStart, matchLen} shape upstream
+    // in runAllSearch, so this one path serves both.
+    await openFileNode({ path: match.path, name: match.name });
+
+    const view = getEditorView();
+    if (!view || getCurrentOpenFile() !== match.path) return;
+
+    try {
+      const line = view.state.doc.line(
+        Math.min(match.lineNumber, view.state.doc.lines),
+      );
+      const pos = Math.min(line.from + match.matchStart, line.to);
+      view.dispatch({
+        selection: { anchor: pos, head: pos + (match.matchLen || 0) },
+        // No scrollIntoView here: centreMatch does the scrolling, and letting
+        // CodeMirror also scroll would mean two competing scrolls per match.
+      });
+      centreMatch(view, pos);
+      // Only hand focus to the editor when the user explicitly clicked a
+      // result row. During Enter/arrow cycling this used to steal focus
+      // from the search input mid-navigation, so the NEXT Enter (or worse,
+      // the next typed character) landed inside the document instead of
+      // the search bar. openTextFile focuses the editor as part of every
+      // open, so the cycling case has to actively take focus BACK.
+      if (focusEditor) view.focus({ preventScroll: true });
+      else els().input?.focus({ preventScroll: true });
+    } catch (err) {
+      console.error("Failed to jump to search match:", err);
+    }
   };
 
   const runAllSearch = async (query) => {
@@ -451,6 +473,13 @@ const TitlebarSearchManager = (() => {
           lineText: m.lineText,
           matchStart: m.matchStart,
           matchLen: m.matchLen,
+          // Row provenance for the results list: tag-query rows get a type
+          // badge. A boolean, not the filter strings — the typed query is
+          // already sitting in the search box (and under prefix matching
+          // it's often a fragment like "태"), while the ACTUAL matched tag
+          // is visible in the snippet via the locator's highlight span, so
+          // repeating either next to the filename adds nothing.
+          isTag: isTagQuery,
         }));
 
       renderAllResults();
@@ -531,21 +560,65 @@ const TitlebarSearchManager = (() => {
   // (.cm-focused appearing right as it fired) — it likely walks further up
   // the DOM than intended looking for a scrollable ancestor. This keeps the
   // scroll fully contained to .cm-scroller.
-  const scrollMatchIntoView = (view, pos) => {
-    try {
-      const coords = view.coordsAtPos(pos);
-      const scroller = view.scrollDOM;
-      if (coords && scroller) {
-        const scrollerRect = scroller.getBoundingClientRect();
-        if (coords.top < scrollerRect.top) {
-          scroller.scrollTop -= scrollerRect.top - coords.top + 40;
-        } else if (coords.bottom > scrollerRect.bottom) {
-          scroller.scrollTop += coords.bottom - scrollerRect.bottom + 40;
-        }
-      }
-    } catch (scrollErr) {
-      console.error("Failed to scroll match into view:", scrollErr);
-    }
+  //
+  // The match is CENTERED rather than nudged just inside the nearest edge.
+  // The old minimum-movement version left a hit sitting on the very first or
+  // last visible line with no context on one side, which is the half of the
+  // context that usually tells you whether it's the hit you wanted. Centering
+  // also makes cycling through matches stable: each one arrives in the same
+  // place instead of alternating between the top and bottom edges.
+  //
+  // Unconditional, deliberately: "already visible, leave it" is what made a
+  // match one line below the top stay pinned there while the next one jumped
+  // to the middle.
+  // Places the TOP of the match's line at the vertical middle of the editor —
+  // not the line's own middle. The distinction matters twice over: the results
+  // dropdown hangs down over the editor's upper region, so anything in the top
+  // half can be covered, and a line here can be arbitrarily tall (a rendered
+  // table or block math is one "line"), where centering its midpoint could
+  // still leave the match's first visible text up under the dropdown. Top of
+  // line at half-height guarantees the match starts in the uncovered lower
+  // half. (A match in the first few lines of a document can't be pushed down —
+  // scrollTop clamps at 0 — which is physics, not a bug.)
+  //
+  // Scheduled through requestMeasure rather than run straight after a
+  // dispatch: a selection-moving dispatch makes CodeMirror reveal the new
+  // cursor during its own measure cycle, which runs AFTER the dispatch call
+  // returns, overwriting any scrollTop written synchronously in between.
+  //
+  // The read/write split is not optional. CodeMirror throws "Reading the
+  // editor layout isn't allowed during an update" if anything measures the
+  // DOM during the write phase, so the geometry is gathered in `read` and
+  // only the scrollTop assignment happens in `write`.
+  //
+  // lineBlockAt is what's measured, NOT coordsAtPos: it answers from the
+  // height map instead of the rendered DOM, so it works for a position
+  // CodeMirror hasn't laid out yet — the normal case right after opening a
+  // file and jumping deep into it, which is exactly when this matters most.
+  // Its `top` is already in document coordinates, the same space as scrollTop.
+  const centreMatch = (view, pos) => {
+    view.requestMeasure({
+      key: "titlebar-search-centre",
+      read: () => {
+        const scroller = view.scrollDOM;
+        if (!scroller) return null;
+        const block = view.lineBlockAt(
+          Math.min(Math.max(pos, 0), view.state.doc.length),
+        );
+        const target = block.top - scroller.clientHeight / 2;
+        // Clamped so a match near either end of the document doesn't ask for
+        // an out-of-range scrollTop; the browser would clamp anyway, but this
+        // keeps the value honest for anything reading it back.
+        return Math.max(
+          0,
+          Math.min(target, scroller.scrollHeight - scroller.clientHeight),
+        );
+      },
+      write: (top) => {
+        if (top == null) return;
+        view.scrollDOM.scrollTop = top;
+      },
+    });
   };
 
   const setCmActiveIndex = (idx) => {
@@ -561,8 +634,10 @@ const TitlebarSearchManager = (() => {
     try {
       view.dispatch({
         selection: { anchor: match.from, head: match.to },
+        // No scrollIntoView here: centreMatch does the scrolling, and letting
+        // CodeMirror also scroll would mean two scrolls per match.
       });
-      scrollMatchIntoView(view, match.from);
+      centreMatch(view, match.from);
       // Deliberately NOT view.focus() here. This runs on the 150ms typing
       // debounce, so focusing the editor meant that halfway through typing a
       // query, focus silently jumped into the document and the rest of the
@@ -738,10 +813,6 @@ const TitlebarSearchManager = (() => {
     // fresh across open/rename/delete/restore paths alike.
     setInterval(updatePathDisplay, 500);
 
-    // Tag autocomplete on the same input — no separate mode, no separate
-    // widget to focus.
-    initTagAutocomplete(input);
-
     // Tag chips (breadcrumb info popover today, a tag panel later) hand over a
     // ready-made query through a window event rather than reaching into this
     // module's internals. Keeps the dependency one-directional.
@@ -751,7 +822,6 @@ const TitlebarSearchManager = (() => {
       setMode("search", { focus: true });
       input.value = q;
       input.setSelectionRange(q.length, q.length);
-      closeTagAutocomplete();
       clearTimeout(debounceTimer);
       runSearch(q);
     });
@@ -821,13 +891,6 @@ const TitlebarSearchManager = (() => {
     });
 
     input.addEventListener("keydown", (e) => {
-      // The tag autocomplete owns arrows/Enter/Tab/Escape while its list is
-      // open. It has to get first refusal: otherwise Enter runs the search on
-      // a half-typed tag and ArrowDown walks the results list underneath.
-      if (tagAutocompleteKeydown(e)) {
-        e.preventDefault();
-        return;
-      }
       if (e.key === "Escape") {
         e.preventDefault();
         if (els().scopeWrapper?.classList.contains("open")) {
@@ -972,6 +1035,29 @@ const TitlebarSearchManager = (() => {
         if (query) runSearch(query);
       });
     };
+
+    // Clicking a #tag pill in the editor (markdown-preview.js dispatches this)
+    // runs it as a vault-wide tag search. runSearch already treats any tag
+    // query as vault-wide regardless of scope, but the scope is set to "all"
+    // explicitly so the results DROPDOWN renders — under "current" scope the
+    // UI expects in-document match cycling and shows no list.
+    document.addEventListener("nib-tag-click", (e) => {
+      const tag = e.detail?.tag;
+      if (!tag) return;
+      applyShortcutScope("all");
+      closeReplaceRow();
+      setMode("search", { focus: true });
+      requestAnimationFrame(() => {
+        const { input: inp } = els();
+        if (!inp) return;
+        inp.value = `tag:${tag}`;
+        inp.focus({ preventScroll: true });
+        // Caret to the end rather than select-all: the next thing a user
+        // typically types is a further filter term, not a replacement query.
+        inp.setSelectionRange(inp.value.length, inp.value.length);
+        runSearch(inp.value.trim());
+      });
+    });
 
     document.addEventListener(
       "keydown",

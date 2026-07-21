@@ -118,9 +118,12 @@ export declare function saveSettings(vaultPath: string, settings: AppSettings): 
  * already in memory, while the text pass is file I/O — narrowing first is
  * what makes `tag:physics 라그랑지안` fast on a large vault.
  *
- * With no `text`, each surviving file yields one row whose `lineText` is a
- * preview (its first heading, or first body line), so the existing results
- * dropdown renders tag hits without any special-casing.
+ * With no `text`, each surviving file yields one row pointing at the first
+ * occurrence of an included tag (inline `#tag` preferred, frontmatter
+ * fallback) with a real match span — so clicking a tag result navigates to
+ * the tag exactly like a text result navigates to its match. A preview row
+ * is only emitted when no occurrence can be located (e.g. an exclude-only
+ * query, where there is nothing specific to point at).
  */
 export declare function searchByTags(vaultPath: string, include: Array<string>, exclude: Array<string>, text?: string | undefined | null): Array<ContentSearchMatch>
 

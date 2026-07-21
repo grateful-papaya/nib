@@ -441,13 +441,12 @@ body.titlebar-results-open .titlebar-search-bar {
 /* --------------------------------------------------------------------
    Shared floating dropdown panel base
 
-   Three panels share the same surface + open/close animation: the scope
-   menu, the breadcrumb info popover, and the tag autocomplete dropdown.
-   Per-panel placement, sizing, and stacking differences follow below.
+   Two panels share the same surface + open/close animation: the scope menu
+   and the breadcrumb info popover. Per-panel placement, sizing, and stacking
+   differences follow below.
    -------------------------------------------------------------------- */
 .titlebar-search-scope-menu,
-.titlebar-path-info-popover,
-.titlebar-tag-suggest {
+.titlebar-path-info-popover {
     position: absolute;
     top: 100%;
     margin-top: 8px;
@@ -467,8 +466,7 @@ body.titlebar-results-open .titlebar-search-bar {
 /* Shared open state (specificity per panel unchanged from the original
    standalone rules). */
 .titlebar-search-scope.open .titlebar-search-scope-menu,
-.titlebar-path-info-popover.open,
-.titlebar-tag-suggest.open {
+.titlebar-path-info-popover.open {
     opacity: 1;
     visibility: visible;
     transform: translateY(0) scale(1);
@@ -727,6 +725,29 @@ body.titlebar-results-open .titlebar-search-bar {
     font-variant-numeric: tabular-nums;
 }
 
+/* Type badge on a result row that came from a `tag:` / `#` query — reads
+   "tag:", marking the row as a tag hit rather than a text hit. Sits between
+   the filename and the right-pinned line number. Deliberately NOT the typed
+   query (that's in the search box) nor the matched tag (that's highlighted in
+   the snippet); it only answers "why is this row here".
+
+   A label, not a control: pointer-events pass through to the row, which is
+   what navigates. (An earlier build had a separate clickable tag list whose
+   rows completed the query instead of navigating — two lookalike lists that
+   answered clicks differently. It's gone; this badge is all that remains of
+   the distinction, and it deliberately isn't clickable.) */
+.titlebar-result-tag-chip {
+    flex-shrink: 0;
+    padding: 0 6px;
+    border-radius: var(--st-radius-pill);
+    background-color: var(--st-accent-a10);
+    color: var(--st-accent);
+    font-size: 0.72rem;
+    line-height: 1.6;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .titlebar-result-snippet {
     font-size: 0.88rem;
     color: var(--st-gray-8);
@@ -804,58 +825,6 @@ body.titlebar-results-open .titlebar-search-bar {
 .titlebar-search-replace-row .titlebar-replace-action:hover {
     background-color: var(--st-accent-a20);
     opacity: 1;
-}
-
-/* --------------------------------------------------------------------
-   Tag autocomplete dropdown
-
-   Created in JS and appended to .titlebar-search-bar, which is already
-   position:relative for the scope menu and results list. One rung above
-   both, because it can legitimately overlap the results list while the user
-   edits a query that already returned hits. (Surface + animation come from
-   the shared panel rule above.)
-   -------------------------------------------------------------------- */
-.titlebar-tag-suggest {
-    left: 0;
-    min-width: 200px;
-    max-width: 320px;
-    padding: 6px;
-    font-size: 0.86rem;
-    transform-origin: top left;
-    z-index: var(--st-z-titlebar-suggest);
-}
-
-.titlebar-tag-suggest-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 7px 10px;
-    border-radius: var(--st-radius-md);
-    color: var(--st-text);
-    cursor: pointer;
-    user-select: none;
-}
-
-.titlebar-tag-suggest-row.active,
-.titlebar-tag-suggest-row:hover {
-    background-color: var(--st-tint-faint);
-}
-
-.titlebar-tag-suggest-name {
-    color: var(--st-accent);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* --st-text-cool, not --st-text-faint: cooler and darker on purpose, so it
-   recedes without going warm-gray next to the blue tag name. Pairs with
-   .path-info-fullpath, which uses the same token for the same reason. */
-.titlebar-tag-suggest-count {
-    flex-shrink: 0;
-    font-size: 0.76rem;
-    color: var(--st-text-cool);
 }
 
 /* --------------------------------------------------------------------
