@@ -206,10 +206,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@napi-rs/cli':
-        specifier: ^3.7.2
-        version: 3.7.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(@types/node@24.13.3)
     devDependencies:
       '@codemirror/lang-markdown':
         specifier: ^6.5.0
@@ -232,6 +228,9 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
+      '@napi-rs/cli':
+        specifier: ^3.7.2
+        version: 3.7.2(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(@types/node@24.13.3)
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
