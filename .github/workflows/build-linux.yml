@@ -1,0 +1,36 @@
+name: Build Linux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deb tooling
+        run: sudo apt-get update && sudo apt-get install -y fakeroot dpkg libsecret-1-dev
+
+      - run: pnpm install --no-frozen-lockfile
+
+      - name: Build native module
+        run: pnpm --filter . run build:rust   # 실제 스크립트명으로 교체
+
+      - name: Build deb
+        run: pnpm electron-builder --linux deb --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nib-deb
+          path: dist/*.deb
